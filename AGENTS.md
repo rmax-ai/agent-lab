@@ -72,3 +72,13 @@ All green before merge. Frontend: typecheck + tests as applicable.
 - Python work → Droid. TypeScript/React work → Codex. Hermes plans, reviews, verifies.
 - Read the phase/story issue body before starting (it carries AC, dependencies, verification commands).
 - Deterministic infrastructure fixes (build gates, scaffolding) are done directly by Hermes, not delegated.
+
+## Companion docs
+
+- [DECISIONS.md](DECISIONS.md) — design rationale; DEC-xx IDs referenced throughout. Respect [FINAL]; question [PROVISIONAL].
+- [PYTHON_DEVELOPMENT.md](PYTHON_DEVELOPMENT.md) — env, gates, async, error handling, ADK usage, testing
+- [PYTHON_API_DESIGN.md](PYTHON_API_DESIGN.md) — protocol models, events, routes, tool signatures
+- [PYTHON_SYSTEM_DESIGN_PATTERNS.md](PYTHON_SYSTEM_DESIGN_PATTERNS.md) — state machine, event store, scenario engine, HITL loop
+- [PYTHON_ARCHITECTURE.md](PYTHON_ARCHITECTURE.md) — workspace layout, dependency direction, process topology
+- [docs/research/phase-1-findings.md](docs/research/phase-1-findings.md) — version pins + ADK API facts; RE-VERIFY the listed ADK 2.8.0 items before Phase A implementation
+- [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) — read before touching `mock-world/`, `backend/scenarios/`, `backend/human_tasks/`

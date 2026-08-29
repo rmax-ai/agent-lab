@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+**/uv.lock
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Secrets / local env
+.envrc
+.env
+.env.*
+
+# Data
+*.db
+*.sqlite
+*.sqlite3
+
+# Hidden scenarios NEVER ship to participants (DEC-14)
+scenarios/hidden/
+
+# Frontend
+node_modules/
+frontend/dist/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
