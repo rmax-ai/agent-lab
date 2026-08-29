@@ -58,7 +58,7 @@ agents/      onboarding coordinator
 ## PR gates
 
 ```bash
-uv sync && uv run ruff check sdk/src backend/src mock-world/src agents/onboarding/src && uv run ty check sdk/src backend/src mock-world/src agents/onboarding/src && uv run pytest
+uv sync && uv run ruff check sdk/src backend/src mock-world/src agents/onboarding/src agents/device && uv run ty check sdk/src backend/src mock-world/src agents/onboarding/src agents/device && uv run pytest
 ```
 
 All green before merge. Frontend: `npm run build` (tsc --noEmit + vite build) in frontend/. `uv sync` from root installs all members (editable path sources).
