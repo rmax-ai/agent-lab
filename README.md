@@ -28,7 +28,7 @@ Google ADK + Python · FastAPI backend · Pydantic · SQLite · YAML scenarios �
 
 ## Status
 
-**Phase 0 — specification extracted.** Implementation not started. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Phase 3 — architecture, research, and design docs complete.** Implementation not started. Board: [GitHub issues](https://github.com/rmax-ai/agent-lab/issues). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Docs
 
