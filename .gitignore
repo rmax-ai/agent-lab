@@ -32,3 +32,4 @@ frontend/dist/
 .DS_Store
 .idea/
 .vscode/
+.serena/
