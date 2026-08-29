@@ -45,6 +45,7 @@ All green before merge. Pin ruff/ty/pytest to the versions in phase-1-findings.
 ## Testing
 
 - pytest + pytest-asyncio (`asyncio_mode = auto`). Verify pytest 9.1 + pytest-asyncio 1.4 compat at Phase A.
+- **Unique test basenames across packages** — `test_smoke.py` in four packages breaks rootdir collection; use `test_<pkg>_<name>.py`.
 - Unit: state machine transitions, scenario parser, evaluator assertions, MockWorld routes.
 - Integration: scenario runs against a scripted agent (mock model), asserting `required_events` / `allowed_final_states` / `forbidden_events`.
 - Eval tests are data-driven: one pytest param per scenario YAML.

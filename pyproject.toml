@@ -1,0 +1,45 @@
+[project]
+name = "agent-lab"
+version = "0.1.0"
+description = "Development, simulation, and evaluation environment for team-owned operational AI agents"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "agentlab-sdk",
+    "agentlab-world",
+    "agentlab-backend",
+    "agentlab-onboarding",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.5",
+    "ty>=0.0.75",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+agentlab-sdk = { path = "sdk", editable = true }
+agentlab-world = { path = "mock-world", editable = true }
+agentlab-backend = { path = "backend", editable = true }
+agentlab-onboarding = { path = "agents/onboarding", editable = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["sdk/src", "backend/src", "mock-world/src", "agents/onboarding/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agentlab"]
+
+[tool.pytest.ini_options]
+testpaths = ["sdk/tests", "backend/tests", "mock-world/tests", "agents/onboarding/tests"]
+asyncio_mode = "auto"
+addopts = "-q"

@@ -35,12 +35,20 @@ Key facts the implementation must respect:
 - SequentialAgent/ParallelAgent/LoopAgent deprecated → use `Workflow` graph. Not needed for Agent Lab MVP (our multi-agent coordination is via channels + workflow contract, not ADK Workflow — DEC-04).
 - Gemini structured output is unreliable for nested Pydantic models — keep schemas FLAT; fallback to text-parse. Directly relevant to the WorkflowRequest/Status/Outcome JSON contract (SPEC §12).
 
-### Open items to verify at Phase A (against installed google-adk 2.8.0)
+### Verified against installed google-adk 2.8.0 (2026-08-29, scripts/verify_adk_280*.py)
 
-1. `auto_create_session` default and any constructor changes since 2.3.0.
-2. ADK's built-in FastAPI/WebSocket serving mode for remote (laptop) agents — is `adk`'s serve API usable as-is, or do we wrap LlmAgent in our own FastAPI app exposing our AgentLabTransport WS protocol? (Preferred: our own WS adapter to keep AgentTransport swappable.)
-3. Tool fault injection points — `before_tool_callback`/`after_tool_callback` are the natural fault-injection seams (SPEC §17.2).
-4. pytest 9.1 + pytest-asyncio 1.4 compatibility (asyncio_mode config).
+1. **`auto_create_session` defaults to `False`** in 2.8.0 (confirmed at runtime) — the v2.3.0 behavior persists. Always set `runner.auto_create_session = True` or create sessions explicitly.
+2. **`InMemoryRunner(agent=..., app_name=...)`** — no `session_service=` param. Params: `agent, node, app_name, plugins, app, plugin_close_timeout`.
+3. **No built-in FastAPI/WS serving modules** (`google.adk.serving/fastapi/web` all ModuleNotFoundError; only `google.adk.cli` exists). Remote/laptop agents MUST be wrapped in our own FastAPI/WebSocket adapter exposing AgentLabTransport — which was the plan anyway (DEC-12).
+4. **Callbacks exist but NOT as `__init__` params** — they are Pydantic model fields on `LlmAgent`: `before_tool_callback`, `after_tool_callback`, `on_tool_error_callback`, `before_model_callback`, `after_model_callback`, `on_model_error_callback`, `before_agent_callback`, `after_agent_callback`. Pass via kwargs or assign post-construction (`agent.before_tool_callback = ...`). Fault injection (A.11) and deterministic model mocks (A.3) both work through these.
+5. **2.8.0 additions:** `LlmAgentConfig`/`BaseAgentConfig` classes (config-object construction pattern), `ManagedAgent`, `McpInstructionProvider`, `LiveRequestQueue`. `FunctionTool(func, require_confirmation=...)` — tool-level confirmation flag exists.
+6. **`InMemorySessionService`** unchanged: `create_session`, `get_session`, `append_event`, etc.
+
+### Notes for Droid stories A.2/A.3
+
+- Deterministic agent tests: `before_model_callback` returning canned `LlmResponse` (verified field path).
+- Scenario fault injection: `before_tool_callback`/`after_tool_callback` on the agent instance (verified field path).
+- Session state keys (`app:`, `user:`, `temp:`) and `Context` (not `CallbackContext`) per the ≤2.3.0 reference — unchanged in 2.8.0 (imports verified).
 
 ## 3. Decisions informed by research
 

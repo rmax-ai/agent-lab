@@ -1,0 +1,23 @@
+[project]
+name = "agentlab-backend"
+version = "0.1.0"
+description = "Agent Lab backend: router, channels, cases, human tasks, scenarios, evaluation, events"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.141",
+    "uvicorn[standard]>=0.52",
+    "agentlab-sdk",
+    "agentlab-world",
+]
+
+[tool.uv.sources]
+agentlab-sdk = { path = "../sdk", editable = true }
+agentlab-world = { path = "../mock-world", editable = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentlab"]

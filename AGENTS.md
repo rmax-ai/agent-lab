@@ -57,11 +57,11 @@ agents/      onboarding coordinator
 
 ## PR gates
 
-```
-uv run ruff check && uv run ty check && uv run pytest
+```bash
+uv sync --all-packages && uv run ruff check sdk/src backend/src mock-world/src agents/onboarding/src && uv run ty check sdk/src backend/src mock-world/src agents/onboarding/src && uv run pytest
 ```
 
-All green before merge. Frontend: typecheck + tests as applicable.
+All green before merge. Frontend: typecheck + tests as applicable. `uv sync --all-packages` is required — the root project is virtual and does not auto-install workspace members.
 
 ## Secrets
 
