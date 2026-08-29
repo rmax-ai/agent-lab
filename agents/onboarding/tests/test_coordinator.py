@@ -320,4 +320,7 @@ def test_coordinator_never_imports_mockworld() -> None:
             module = node.module or ""
             imported.append(module)
 
-    assert all(name != "agentlab.world" and not name.startswith("agentlab.world.") for name in imported)
+    assert all(
+        name != "agentlab.world" and not name.startswith("agentlab.world.")
+        for name in imported
+    )
