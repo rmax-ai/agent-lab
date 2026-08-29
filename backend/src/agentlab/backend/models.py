@@ -1,6 +1,6 @@
-"""Backend-owned SQLModel tables (SPEC §11/§12/§15/§23).
+"""Backend-owned SQLModel tables (SPEC §11/§12/§13/§15/§23).
 
-The backend shares one SQLite file with MockWorld but owns only these four
+The backend shares one SQLite file with MockWorld but owns only these five
 tables. MockWorld owns the world-domain tables. No foreign keys cross that
 boundary; referential integrity is validated in service code. JSON-shaped
 fields are stored as TEXT with the ``json_dumps``/``json_loads`` helpers.
@@ -96,6 +96,18 @@ class HumanTaskRow(SQLModel, table=True):
     resolved_at: datetime | None = None
 
 
+class ChannelMessageRow(SQLModel, table=True):
+    """A persisted channel message (SPEC §13)."""
+
+    __tablename__ = "channel_messages"
+
+    id: int | None = Field(default=None, primary_key=True)
+    ts: datetime = Field(default_factory=utcnow)
+    channel: str
+    agent_id: str
+    message: str
+
+
 # The complete set of tables the backend owns. ``create_all`` iterates this list
 # so MockWorld-owned tables are never touched by the backend.
 BACKEND_MODELS: list[type[SQLModel]] = [
@@ -103,4 +115,5 @@ BACKEND_MODELS: list[type[SQLModel]] = [
     WorkflowRun,
     EventRow,
     HumanTaskRow,
+    ChannelMessageRow,
 ]

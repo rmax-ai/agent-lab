@@ -87,3 +87,86 @@ async def test_transport_send_subscribe_delegate() -> None:
     assert inbound[0]["type"] == "channel_message"
     assert inbound[0]["channel"] == "devices"
     assert inbound[0]["message"] == "hello-device"
+
+
+async def test_transport_welcome_capture() -> None:
+    got_welcome = asyncio.Event()
+    welcomes: list[dict] = []
+
+    async def on_welcome(frame: dict) -> None:
+        welcomes.append(frame)
+        got_welcome.set()
+
+    async def handler(ws: ServerConnection) -> None:
+        await ws.send(
+            json.dumps(
+                {
+                    "type": "welcome",
+                    "agent_id": "device-agent",
+                    "channels": ["#devices", "agent:device-agent"],
+                    "online_agents": ["onboarding-agent", "device-agent"],
+                }
+            )
+        )
+        async for _ in ws:
+            pass
+
+    server = await websockets.serve(handler, "127.0.0.1", 0)
+    sockets = list(server.sockets)
+    port = sockets[0].getsockname()[1]
+
+    transport = AgentLabTransport(
+        f"ws://127.0.0.1:{port}",
+        agent_id="device-agent",
+        on_welcome=on_welcome,
+    )
+    await transport.connect()
+    await asyncio.wait_for(got_welcome.wait(), timeout=2.0)
+
+    assert transport.last_welcome is not None
+    assert transport.last_welcome["type"] == "welcome"
+    assert transport.last_welcome["agent_id"] == "device-agent"
+    assert transport.list_online_agents() == ["onboarding-agent", "device-agent"]
+    assert welcomes[0]["channels"] == ["#devices", "agent:device-agent"]
+
+    await transport.disconnect()
+    server.close()
+    await server.wait_closed()
+
+
+async def test_transport_event_frame_dispatch() -> None:
+    got_event = asyncio.Event()
+    events: list[dict] = []
+
+    async def on_event(frame: dict) -> None:
+        events.append(frame)
+        got_event.set()
+
+    async def handler(ws: ServerConnection) -> None:
+        await ws.send(
+            json.dumps(
+                {
+                    "type": "event",
+                    "payload": {"type": "WORKFLOW_STATUS", "workflow_id": "WF-D-42"},
+                }
+            )
+        )
+        async for _ in ws:
+            pass
+
+    server = await websockets.serve(handler, "127.0.0.1", 0)
+    sockets = list(server.sockets)
+    port = sockets[0].getsockname()[1]
+
+    transport = AgentLabTransport(f"ws://127.0.0.1:{port}", agent_id="device-agent")
+    await transport.subscribe_events(on_event)
+    await transport.connect()
+    await asyncio.wait_for(got_event.wait(), timeout=2.0)
+
+    assert events
+    assert events[0]["type"] == "event"
+    assert events[0]["payload"]["workflow_id"] == "WF-D-42"
+
+    await transport.disconnect()
+    server.close()
+    await server.wait_closed()

@@ -33,6 +33,8 @@ _SEND_TIMEOUT_SECONDS = 10.0
 _CHANNEL_MESSAGE = "channel_message"
 _WORKFLOW_REQUEST = "workflow_request"
 _WORKFLOW_STATUS = "workflow_status"
+_WELCOME = "welcome"
+_EVENT = "event"
 
 
 def _to_ws_uri(base_url: str) -> str:
@@ -73,13 +75,22 @@ class AgentTransport(ABC):
 class AgentLabTransport(AgentTransport):
     """WebSocket transport to the Agent Lab hub (SPEC §14, DEC-12)."""
 
-    def __init__(self, base_url: str, agent_id: str, token: str | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        agent_id: str,
+        token: str | None = None,
+        on_welcome: Callable[[dict], Awaitable[None]] | None = None,
+    ) -> None:
         self._agent_id = agent_id
         self._token = token
         self._uri = _to_ws_uri(base_url)
         self._connection: ClientConnection | None = None
         self._recv_task: asyncio.Task[None] | None = None
         self._subscribers: dict[str, list[Callable[[dict], Awaitable[None]]]] = {}
+        self._event_callbacks: list[Callable[[dict], Awaitable[None]]] = []
+        self._on_welcome: Callable[[dict], Awaitable[None]] | None = on_welcome
+        self.last_welcome: dict | None = None
 
     async def connect(self) -> None:
         """Open the WebSocket and start the receive loop."""
@@ -142,6 +153,21 @@ class AgentLabTransport(AgentTransport):
     ) -> None:
         self._subscribers.setdefault(channel, []).append(callback)
 
+    async def subscribe_events(self, callback: Callable[[dict], Awaitable[None]]) -> None:
+        """Register ``callback`` for inbound ``event`` frames."""
+        self._event_callbacks.append(callback)
+
+    def list_online_agents(self) -> list[str]:
+        """Return the online agents advertised by the most recent welcome frame.
+
+        This is a pure local read; it sends nothing over the wire.
+        """
+        welcome = self.last_welcome
+        if welcome is None:
+            return []
+        online = welcome.get("online_agents")
+        return list(online) if isinstance(online, list) else []
+
     async def delegate(self, request: WorkflowRequest) -> None:
         await self._send_frame(
             {
@@ -167,8 +193,17 @@ class AgentLabTransport(AgentTransport):
                 frame = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if not isinstance(frame, dict) or frame.get("type") != _CHANNEL_MESSAGE:
+            if not isinstance(frame, dict):
                 continue
-            channel = frame.get("channel")
-            for callback in list(self._subscribers.get(channel, [])):
-                await callback(frame)
+            frame_type = frame.get("type")
+            if frame_type == _WELCOME:
+                self.last_welcome = frame
+                if self._on_welcome is not None:
+                    await self._on_welcome(frame)
+            elif frame_type == _EVENT:
+                for callback in list(self._event_callbacks):
+                    await callback(frame)
+            elif frame_type == _CHANNEL_MESSAGE:
+                channel = frame.get("channel")
+                for callback in list(self._subscribers.get(channel, [])):
+                    await callback(frame)

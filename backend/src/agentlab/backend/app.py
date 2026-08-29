@@ -7,15 +7,16 @@ rendered as ``422`` by FastAPI's validation handler.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, Request
+from fastapi import Depends, FastAPI, Header, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlmodel import Session
 
-from agentlab.backend import cases, db, events, tasks, workflows
+from agentlab.backend import cases, channels, db, events, hub, tasks, workflows
 from agentlab.backend.errors import BackendError
 from agentlab.backend.statemachine import IllegalTransitionError
 from agentlab.sdk.protocols import HumanTask, WorkflowRequest, WorkflowStatus
@@ -64,6 +65,14 @@ class DecisionRequest(BaseModel):
     resolved_by: str
 
 
+class AgentRegister(BaseModel):
+    """Request body for ``POST /agents/register`` (HTTP fallback registration)."""
+
+    agent_id: str
+    tools: int = 0
+    knowledge_docs: int = 0
+
+
 SessionDep = Annotated[Session, Depends(db.get_session)]
 AgentIdDep = Annotated[str, Depends(_require_agent_id)]
 
@@ -75,6 +84,16 @@ def _describe(exc: RequestValidationError) -> str:
         message = str(error.get("msg", "invalid"))
         parts.append(f"{location}: {message}" if location else message)
     return "; ".join(parts) or "Invalid request body"
+
+
+def _parse_since(since: str | None) -> datetime | None:
+    """Parse the ``since`` query parameter into an aware-or-naive datetime."""
+    if not since:
+        return None
+    try:
+        return datetime.fromisoformat(since)
+    except ValueError as exc:
+        raise BackendError(400, "INVALID_SINCE", f"Invalid since timestamp {since!r}") from exc
 
 
 def _register_exception_handlers(app: FastAPI) -> None:
@@ -107,10 +126,12 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def create_app() -> FastAPI:
-    """Build the backend app, initialising its four owned tables."""
+    """Build the backend app, initialising its owned tables."""
     app = FastAPI(title="Agent Lab Backend", version="0.1.0")
 
     _register_exception_handlers(app)
+
+    channel_hub = hub.ChannelHub()
 
     @app.post("/cases", status_code=201)
     def create_case(body: CaseCreate, session: SessionDep) -> dict[str, Any]:
@@ -205,6 +226,31 @@ def create_app() -> FastAPI:
         session: SessionDep,
     ) -> dict[str, Any]:
         return tasks.decide(session, human_task_id, body.decision, body.resolved_by)
+
+    @app.get("/agents")
+    async def list_agents() -> dict[str, Any]:
+        return {"agents": channel_hub.list_agents()}
+
+    @app.post("/agents/register", status_code=201)
+    async def register_agent_http(body: AgentRegister) -> dict[str, Any]:
+        return channel_hub.register_agent(body.agent_id, body.tools, body.knowledge_docs)
+
+    @app.get("/channels")
+    def list_channels() -> dict[str, Any]:
+        return {"channels": channels.list_channels()}
+
+    @app.get("/channels/{channel}/messages")
+    def list_channel_messages(
+        channel: str,
+        session: SessionDep,
+        since: str | None = None,
+    ) -> dict[str, Any]:
+        since_dt = _parse_since(since)
+        return {"messages": channels.get_history(session, channel, since_dt)}
+
+    @app.websocket("/ws/agents")
+    async def agent_websocket(websocket: WebSocket) -> None:
+        await channel_hub.handle_connection(websocket)
 
     db.create_all()
     return app
