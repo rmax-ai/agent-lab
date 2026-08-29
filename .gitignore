@@ -33,3 +33,4 @@ frontend/dist/
 .idea/
 .vscode/
 .serena/
+.hermes/
