@@ -98,6 +98,47 @@ The canonical Event Store types (SPEC §23 — for example `WORKFLOW_DELEGATED`,
 event-store timeline onto the run's observed events, so they match exactly
 like trajectory events.
 
+## Hidden scenarios (DEC-14)
+
+`scenarios/hidden/` holds the Platform Team's private unseen-simulation
+scenarios — including the SPEC §20 "unknown" scenario, where teams know only
+that *some* onboarding exceptions will occur, not which. The rule (DEC-14
+[FINAL]):
+
+- **Hidden scenarios never ship to participants.** Participants receive only
+  the team packs (`scenarios/devices/`, `scenarios/access/`,
+  `scenarios/integration/`). Team scenarios and hidden scenarios are separate
+  distributions (SPEC §28).
+- `scenarios/hidden/` is **gitignored**, so a fresh clone or CI checkout has
+  no hidden scenarios at all. Nothing in `templates/`, `knowledge/`, or the
+  domain certification packs may reference hidden scenario ids — the
+  distribution guard in
+  `agents/onboarding/tests/test_hidden_scenarios.py` asserts this on every
+  run, including CI.
+- **Canonical copies live in a platform archive outside this repo.** The
+  platform host either copies them into `scenarios/hidden/` or points the
+  `AGENTLAB_HIDDEN_DIR` environment variable at the archive checkout; the
+  hidden runner honors the override and otherwise reads the default
+  directory.
+- On hosts without the archive the hidden runner **skips**; on the platform
+  host it runs every `*.yaml` it finds through the same ScenarioEngine +
+  EvaluationEngine mechanism as the integration pack, and every hidden
+  scenario must PASS.
+
+Run the hidden runner with:
+
+```bash
+uv run pytest agents/onboarding/tests/test_hidden_scenarios.py
+# or, against a platform archive outside the repo:
+AGENTLAB_HIDDEN_DIR=/path/to/archive uv run pytest agents/onboarding/tests/test_hidden_scenarios.py
+```
+
+Vocabulary additions (hidden):
+
+- `approval_denied` — a human decision denied the stated justification
+  (request-resolution policy: final for that justification; retry only with
+  new information).
+
 ## Scenario-events vocabulary
 
 Trajectory events are the snake_case logical events an agent (or a scripted
