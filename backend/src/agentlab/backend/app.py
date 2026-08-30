@@ -12,6 +12,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlmodel import Session
@@ -143,6 +144,13 @@ def _register_exception_handlers(app: FastAPI) -> None:
 def create_app() -> FastAPI:
     """Build the backend app, initialising its owned tables."""
     app = FastAPI(title="Agent Lab Backend", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     _register_exception_handlers(app)
 

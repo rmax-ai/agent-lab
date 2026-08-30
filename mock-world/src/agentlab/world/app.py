@@ -21,6 +21,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -621,6 +622,13 @@ def _describe(exc: RequestValidationError) -> str:
 def create_app() -> FastAPI:
     """Build the MockWorld app, initialising schema + canonical seed."""
     app = FastAPI(title="Agent Lab MockWorld", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     _register_exception_handlers(app)
 
