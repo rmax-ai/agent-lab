@@ -7,9 +7,12 @@ rendered as ``422`` by FastAPI's validation handler.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any
 
+import yaml
 from fastapi import Depends, FastAPI, Header, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,9 +22,26 @@ from sqlmodel import Session
 
 from agentlab.backend import cases, channels, db, events, hub, tasks, workflows
 from agentlab.backend.errors import BackendError
+from agentlab.backend.evaluation import scoring
+from agentlab.backend.scenarios.loader import load_scenario
+from agentlab.backend.scenarios.models import ScenarioConfigError
 from agentlab.backend.statemachine import IllegalTransitionError
 from agentlab.sdk.events import EventType
 from agentlab.sdk.protocols import HumanTask, WorkflowRequest, WorkflowStatus
+
+logger = logging.getLogger(__name__)
+
+# app.py lives at backend/src/agentlab/backend/app.py, so parents[4] is the
+# repo root (same resolution pattern as mock-world db.py).
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+
+# Scenario pack root. Module-level so tests can point the platform routes at a
+# tmp tree. AGENTLAB_HIDDEN_DIR is deliberately NOT honoured here: that env var
+# belongs to the hidden-scenario test runner, not the API surface.
+SCENARIOS_ROOT = _REPO_ROOT / "scenarios"
+
+# Team-pack domains, in listing order. "hidden" is handled separately.
+_SCENARIO_DOMAINS: tuple[str, ...] = ("devices", "access", "integration")
 
 
 def _require_agent_id(
@@ -110,6 +130,99 @@ def _parse_since(since: str | None) -> datetime | None:
         return datetime.fromisoformat(since)
     except ValueError as exc:
         raise BackendError(400, "INVALID_SINCE", f"Invalid since timestamp {since!r}") from exc
+
+
+def _read_yaml_mapping(path: Path) -> dict[str, Any] | None:
+    """Best-effort YAML mapping read; ``None`` (logged) on any failure."""
+    try:
+        raw: Any = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        logger.warning("skipping unreadable scenario file %s: %s", path, exc)
+        return None
+    if not isinstance(raw, dict):
+        logger.warning("skipping non-mapping scenario file %s", path)
+        return None
+    return raw
+
+
+def _display_path(path: Path) -> str:
+    """Repo-relative path when possible, else the bare filename."""
+    try:
+        return path.relative_to(_REPO_ROOT).as_posix()
+    except ValueError:
+        return path.name
+
+
+def _team_scenario_entry(path: Path, domain: str) -> dict[str, Any] | None:
+    """Build the listing entry for one team-pack YAML, or ``None`` to skip it.
+
+    The expected block comes from the validated :class:`Scenario` model. A
+    ``description`` is taken from the raw YAML when present (the schema
+    currently forbids extra keys, so today it never is) and otherwise falls
+    back to the scenario id. Invalid files are logged and skipped, never fatal.
+    """
+    try:
+        scenario = load_scenario(path)
+    except ScenarioConfigError as exc:
+        logger.warning("skipping invalid scenario file %s: %s", path, exc)
+        return None
+    raw = _read_yaml_mapping(path) or {}
+    description = raw.get("description")
+    if isinstance(description, str) and description.strip():
+        description = description.strip().splitlines()[0]
+    else:
+        description = scenario.id
+    return {
+        "id": scenario.id,
+        "domain": domain,
+        "file": _display_path(path),
+        "description": description,
+        "required_events": list(scenario.expected.required_events),
+        "allowed_final_states": list(scenario.expected.allowed_final_states),
+        "forbidden_events": list(scenario.expected.forbidden_events),
+    }
+
+
+def _hidden_scenario_entry(path: Path) -> dict[str, Any] | None:
+    """Build the DEC-14-minimal hidden entry: id + file + domain + flag only.
+
+    Hidden scenarios are never shipped to participants; this route serves the
+    platform console, but even here the YAML contents (initial_state, events,
+    expected) stay on disk — only list-level metadata is exposed.
+    """
+    raw = _read_yaml_mapping(path)
+    if raw is None:
+        return None
+    scenario_id = raw.get("id")
+    if not isinstance(scenario_id, str) or not scenario_id.strip():
+        logger.warning("skipping hidden scenario file without an id: %s", path)
+        return None
+    return {
+        "id": scenario_id.strip(),
+        "domain": "hidden",
+        "file": _display_path(path),
+        "hidden": True,
+    }
+
+
+def _list_scenarios(root: Path) -> list[dict[str, Any]]:
+    """Scan ``root`` for team packs plus (when present) the hidden directory."""
+    entries: list[dict[str, Any]] = []
+    for domain in _SCENARIO_DOMAINS:
+        domain_dir = root / domain
+        if not domain_dir.is_dir():
+            continue
+        for path in sorted(domain_dir.glob("*.yaml")):
+            entry = _team_scenario_entry(path, domain)
+            if entry is not None:
+                entries.append(entry)
+    hidden_dir = root / "hidden"
+    if hidden_dir.is_dir():
+        for path in sorted(hidden_dir.glob("*.yaml")):
+            entry = _hidden_scenario_entry(path)
+            if entry is not None:
+                entries.append(entry)
+    return entries
 
 
 def _register_exception_handlers(app: FastAPI) -> None:
@@ -289,6 +402,55 @@ def create_app() -> FastAPI:
     ) -> dict[str, Any]:
         since_dt = _parse_since(since)
         return {"messages": channels.get_history(session, channel, since_dt)}
+
+    @app.get("/scenarios")
+    def list_scenarios_route() -> dict[str, Any]:
+        """List the scenario packs found on disk (SPEC §16/§28, DEC-14).
+
+        Read-only, deterministic, no world or LLM dependency: the YAML files
+        under ``scenarios/<domain>/`` are the single source of truth. Team
+        packs (devices/access/integration) expose their full ``expected``
+        block; hidden scenarios are listed only when ``scenarios/hidden/``
+        exists on disk (it does not on fresh clones or CI — DEC-14) and even
+        then only as minimal metadata (id, file, ``hidden: true``), never
+        their YAML contents. Unparseable files are skipped and logged.
+
+        Running a scenario over HTTP is deliberately not part of this route
+        surface (deferred — see the Epic D production notes).
+        """
+        return {"scenarios": _list_scenarios(SCENARIOS_ROOT)}
+
+    @app.get("/evals/model")
+    def get_evaluation_model() -> dict[str, Any]:
+        """The evaluation model inventory (SPEC §24).
+
+        Everything is read from the real sources — the
+        ``agentlab.backend.evaluation.scoring`` constants and the scenario
+        YAML files on disk — so this inventory can never drift from the
+        scorer. Evaluation-result persistence is deliberately not part of
+        this route surface (deferred — see the Epic D production notes).
+        """
+        entries = _list_scenarios(SCENARIOS_ROOT)
+        packs: dict[str, Any] = {
+            domain: [
+                entry["id"] for entry in entries if entry["domain"] == domain
+            ]
+            for domain in _SCENARIO_DOMAINS
+        }
+        hidden = [entry for entry in entries if entry["domain"] == "hidden"]
+        if (SCENARIOS_ROOT / "hidden").is_dir():
+            packs["hidden_count"] = len(hidden)
+        return {
+            "dimensions": [
+                {"name": name, "weight": weight}
+                for name, weight in scoring.CATEGORY_WEIGHTS.items()
+            ],
+            "threshold": scoring.PASS_THRESHOLD,
+            # Mirrors score_scenario: total = sum(weight * score); passed when
+            # total >= threshold.
+            "pass_criterion": "sum(weight * score) >= threshold",
+            "packs": packs,
+        }
 
     @app.websocket("/ws/agents")
     async def agent_websocket(websocket: WebSocket) -> None:
