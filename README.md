@@ -2,7 +2,7 @@
 
 Development, simulation, and evaluation environment for team-owned operational AI agents.
 
-**Agent Lab** is a self-contained simulation harness around [Google ADK](https://google.github.io/adk-docs/). Teams receive an agent template, a Markdown knowledge base, typed tools backed by a shared MockWorld API, and certification scenarios. The initial business process is **monthly employee onboarding**: an Onboarding Agent coordinates Access, Device, Systems, and Applications domain agents against a simulated reality — then the whole system must answer, deterministically: *"Are next Monday's new employees ready?"*
+**Agent Lab** is a self-contained simulation harness around [Google ADK](https://google.github.io/adk-docs/). Teams receive an agent template, a Markdown knowledge base, typed tools backed by a shared MockWorld API, and certification scenarios. The first business process is **monthly employee onboarding**: an Onboarding Agent coordinates domain agents (Access and Device implemented; Systems and Applications registry-ready for replication) against a simulated reality — then the whole system must answer, deterministically: *"Are next Monday's new employees ready?"*
 
 ```
 Onboarding Agent → delegates outcomes → Domain Agents → reason via knowledge + observed state → Domain Tools → MockWorld
@@ -10,9 +10,42 @@ Onboarding Agent → delegates outcomes → Domain Agents → reason via knowled
 
 The coordinator owns the process. Domain agents own their workflows.
 
+## Quickstart
+
+**Platform development (this repo):**
+
+```bash
+git clone https://github.com/rmax-ai/agent-lab.git && cd agent-lab
+uv sync
+uv run pytest                                  # 222 tests: unit + certification packs + finals
+uv run agent-lab --help                        # dev / init / scenario run / trace / status
+uv run agent-lab scenario run --scenario scenarios/devices/01_happy_path.yaml --scripted
+```
+
+**Team participants (build your own domain agent):**
+
+```bash
+cd agent-lab && uv run agent-lab init my-team-agent && cd my-team-agent
+uv sync && uv run agent-lab dev
+```
+
+Expected startup output (SPEC §26):
+
+```
+✓ connected to Agent Lab
+✓ MockWorld available
+✓ knowledge loaded: 1 documents
+✓ tools registered: 0
+✓ team-agent ONLINE
+```
+
+Edit `instructions.md`, `knowledge/*.md`, `agent.py` — the loop is edit → run → scenario → inspect trace → improve. See the [participant runbook](docs/PARTICIPANT_RUNBOOK.md).
+
+**Operator console:** `cd frontend && npm install && npm run dev` (backend + world must be running: `uv run agent-lab dev`). Live mode hits the backend on `:8080` and MockWorld on `:8000`; `VITE_MOCK=1` switches to mock replay.
+
 ## Key properties
 
-| Property | Hackathon | Later |
+| Property | Current | Later |
 |---|---|---|
 | Knowledge | MarkdownKnowledgeProvider | ConfluenceKnowledgeProvider |
 | Domain tools | MockWorld HTTP | Direct APIs / MCP |
@@ -28,7 +61,7 @@ Google ADK + Python · FastAPI backend · Pydantic · SQLite · YAML scenarios �
 
 ## Status
 
-**Phase 3 — architecture, research, and design docs complete.** Implementation not started. Board: [GitHub issues](https://github.com/rmax-ai/agent-lab/issues). See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Phase 4 complete, Phase 5 verification green.** Vertical slice (onboarding → device → access → HITL → eval), replication proof (Access agent), multi-agent finals (integration, unknown, chaos with readiness verdict + audit trail), CLI dev loop, operator console, hardening (event route, fault isolation, WS reconnect, CORS). Board: [GitHub issues](https://github.com/rmax-ai/agent-lab/issues).
 
 ## Docs
 
