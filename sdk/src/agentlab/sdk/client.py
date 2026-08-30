@@ -40,14 +40,26 @@ def _error_message(response: httpx.Response) -> str:
 
 
 class AgentLabClient:
-    """Async wrapper around the backend REST API."""
+    """Async wrapper around the backend REST API.
 
-    def __init__(self, base_url: str, token: str | None = None) -> None:
+    ``agent_id`` is the registered identity sent as ``X-Agent-Id`` on
+    agent-authenticated calls (currently ``emit_event``; SPEC §23).
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        token: str | None = None,
+        agent_id: str | None = None,
+    ) -> None:
         headers: dict[str, str] = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
+        if agent_id:
+            headers["X-Agent-Id"] = agent_id
         self._client = httpx.AsyncClient(base_url=base_url, headers=headers)
         self.base_url = base_url
+        self.agent_id = agent_id
 
     async def __aenter__(self) -> AgentLabClient:
         return self
@@ -93,6 +105,14 @@ class AgentLabClient:
         return response.json()
 
     async def emit_event(self, event: Event) -> dict[str, Any]:
+        """Append ``event`` to the case trace via ``POST /events`` (SPEC §23).
+
+        The server forces ``actor`` to the authenticated ``X-Agent-Id`` and
+        sets ``ts`` itself, so the client-supplied values are advisory only;
+        the Event model keeps them required so in-process producers still
+        build complete records. Requires the client to be constructed with a
+        registered ``agent_id``.
+        """
         response = await self._client.post("/events", json=event.to_dict())
         self._raise_for_status(response)
         return response.json()

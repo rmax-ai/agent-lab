@@ -137,6 +137,18 @@ class ScenarioEngine:
         Returns:
             The collected :class:`ScenarioResult`.
         """
+        # Per-run fault state (contextvars): concurrent runs never share armed
+        # or applied faults; everything spawned inside the run inherits it.
+        with faults.run_context():
+            return await self._run(scenario, agent_factory, run_kwargs)
+
+    async def _run(
+        self,
+        scenario: Scenario,
+        agent_factory: AgentFactory,
+        run_kwargs: dict[str, Any] | None = None,
+    ) -> ScenarioResult:
+        """Execute one scenario run inside its fault context (see ``run``)."""
         run_kwargs = run_kwargs or {}
         time_scale = float(run_kwargs.get("time_scale", 1.0))
         base_url = run_kwargs.get("base_url") or self.mockworld_url

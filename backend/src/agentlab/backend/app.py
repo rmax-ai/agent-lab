@@ -13,12 +13,13 @@ from typing import Annotated, Any
 from fastapi import Depends, FastAPI, Header, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from agentlab.backend import cases, channels, db, events, hub, tasks, workflows
 from agentlab.backend.errors import BackendError
 from agentlab.backend.statemachine import IllegalTransitionError
+from agentlab.sdk.events import EventType
 from agentlab.sdk.protocols import HumanTask, WorkflowRequest, WorkflowStatus
 
 
@@ -71,6 +72,20 @@ class AgentRegister(BaseModel):
     agent_id: str
     tools: int = 0
     knowledge_docs: int = 0
+
+
+class EventCreate(BaseModel):
+    """Request body for ``POST /events`` (SPEC §23).
+
+    ``actor`` is always forced to the ``X-Agent-Id`` header value and ``ts`` is
+    server-set; client-supplied values for either are ignored. ``type`` is
+    validated against the EventType vocabulary (SPEC §23).
+    """
+
+    case_id: str
+    workflow_id: str | None = None
+    type: EventType
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 SessionDep = Annotated[Session, Depends(db.get_session)]
@@ -148,6 +163,25 @@ def create_app() -> FastAPI:
     @app.get("/cases/{case_id}/events")
     def list_case_events(case_id: str, session: SessionDep) -> dict[str, Any]:
         return {"events": [event.to_dict() for event in events.list_events(session, case_id)]}
+
+    @app.post("/events", status_code=201)
+    def emit_agent_event(
+        body: EventCreate,
+        session: SessionDep,
+        agent_id: AgentIdDep,
+    ) -> dict[str, Any]:
+        # The writer must be a REGISTERED agent (SPEC §14), and the event's
+        # actor is forced to that identity so agents cannot spoof each other.
+        if agent_id not in channel_hub.registry:
+            raise BackendError(404, "NOT_FOUND", f"Agent {agent_id!r} is not registered")
+        return events.record_agent_event(
+            session,
+            agent_id=agent_id,
+            case_id=body.case_id,
+            workflow_id=body.workflow_id,
+            type=body.type,
+            payload=body.payload,
+        )
 
     @app.post("/workflows", status_code=201)
     def start_workflow(

@@ -108,9 +108,17 @@ class ChannelHub:
         await self.broadcast(f"{PRIVATE_PREFIX}{agent_id}", frame)
 
     async def _safe_send(self, websocket: WebSocket, frame: dict[str, Any]) -> None:
-        """Best-effort send; a dead subscriber is skipped, not fatal."""
-        with contextlib.suppress(Exception):
+        """Best-effort send; a failed send drops the dead subscriber.
+
+        A connection whose socket died without a clean disconnect (or whose
+        drop the handler has not noticed yet) is unsubscribed here so stale
+        entries never linger in the channel fanout sets; fanout itself stays
+        best-effort and never raises.
+        """
+        try:
             await websocket.send_json(frame)
+        except Exception:
+            self._unsubscribe(websocket)
 
     # -- persistence ----------------------------------------------------------
 

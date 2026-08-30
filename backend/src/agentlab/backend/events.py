@@ -13,7 +13,8 @@ from typing import Any
 
 from sqlmodel import Session, select
 
-from agentlab.backend.models import EventRow
+from agentlab.backend.errors import BackendError
+from agentlab.backend.models import EventRow, OnboardingCase, WorkflowRun
 from agentlab.sdk.protocols import Event
 
 
@@ -53,6 +54,40 @@ def emit_event(
         )
     )
     return event
+
+
+def record_agent_event(
+    session: Session,
+    *,
+    agent_id: str,
+    case_id: str,
+    workflow_id: str | None,
+    type: str | Any,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate and persist an agent-emitted event, then return the created row.
+
+    Route-level referential validation (the case exists; a supplied workflow
+    exists and belongs to that case) wraps the single writer helper, so
+    :func:`emit_event` stays the ONLY path into the Event Store (SPEC §23).
+    ``actor`` is always the authenticated agent id and ``ts`` is server-set;
+    client-supplied values for either never reach the store.
+    """
+    if session.get(OnboardingCase, case_id) is None:
+        raise BackendError(404, "NOT_FOUND", f"Case {case_id!r} not found")
+    if workflow_id is not None:
+        run = session.get(WorkflowRun, workflow_id)
+        if run is None:
+            raise BackendError(404, "NOT_FOUND", f"Workflow {workflow_id!r} not found")
+        if run.case_id != case_id:
+            raise BackendError(
+                400,
+                "WORKFLOW_CASE_MISMATCH",
+                f"Workflow {workflow_id!r} does not belong to case {case_id!r}",
+            )
+    event = emit_event(session, case_id, workflow_id, agent_id, type, payload)
+    session.commit()
+    return event.to_dict()
 
 
 def list_events(session: Session, case_id: str) -> list[Event]:

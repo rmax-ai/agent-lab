@@ -25,6 +25,7 @@ from typing import Any
 
 import websockets
 from websockets.asyncio.client import ClientConnection
+from websockets.exceptions import ConnectionClosed
 
 from agentlab.sdk.protocols import WorkflowRequest, WorkflowStatus
 
@@ -35,6 +36,10 @@ _WORKFLOW_REQUEST = "workflow_request"
 _WORKFLOW_STATUS = "workflow_status"
 _WELCOME = "welcome"
 _EVENT = "event"
+
+
+class TransportError(RuntimeError):
+    """A frame could not be sent: never connected, dropped, or timed out."""
 
 
 def _to_ws_uri(base_url: str) -> str:
@@ -93,7 +98,14 @@ class AgentLabTransport(AgentTransport):
         self.last_welcome: dict | None = None
 
     async def connect(self) -> None:
-        """Open the WebSocket and start the receive loop."""
+        """Open the WebSocket and start the receive loop.
+
+        Reconnect-safe: any stale connection or receive loop from a previous
+        (possibly dropped) session is torn down first, so a reconnect never
+        leaks a second receive task or doubles inbound delivery. Local channel
+        subscriptions survive reconnects; the caller re-sends ``hello``.
+        """
+        await self._teardown()
         headers: dict[str, str] = {}
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
@@ -106,14 +118,19 @@ class AgentLabTransport(AgentTransport):
 
     async def disconnect(self) -> None:
         """Stop the receive loop and close the connection."""
-        if self._recv_task is not None:
-            self._recv_task.cancel()
+        await self._teardown()
+
+    async def _teardown(self) -> None:
+        """Cancel the receive loop and close the connection, if any."""
+        recv_task, self._recv_task = self._recv_task, None
+        connection, self._connection = self._connection, None
+        if recv_task is not None:
+            recv_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await self._recv_task
-            self._recv_task = None
-        if self._connection is not None:
-            await self._connection.close()
-            self._connection = None
+                await recv_task
+        if connection is not None:
+            with contextlib.suppress(Exception):
+                await connection.close()
 
     async def __aenter__(self) -> AgentLabTransport:
         await self.connect()
@@ -128,13 +145,25 @@ class AgentLabTransport(AgentTransport):
         await self.disconnect()
 
     async def _send_frame(self, frame: dict[str, Any]) -> None:
-        if self._connection is None:
-            raise RuntimeError("Not connected: call connect() before sending.")
+        connection = self._connection
+        if connection is None:
+            raise TransportError("Not connected: call connect() before sending.")
         payload = json.dumps(frame)
-        await asyncio.wait_for(
-            self._connection.send(payload),
-            timeout=_SEND_TIMEOUT_SECONDS,
-        )
+        try:
+            await asyncio.wait_for(
+                connection.send(payload),
+                timeout=_SEND_TIMEOUT_SECONDS,
+            )
+        except ConnectionClosed as exc:
+            # The socket dropped under us; mark it dead and surface a typed
+            # error instead of hanging or leaking a half-open connection.
+            if self._connection is connection:
+                self._connection = None
+            raise TransportError(f"Send failed: connection closed ({exc})") from exc
+        except TimeoutError as exc:
+            raise TransportError(
+                f"Send timed out after {_SEND_TIMEOUT_SECONDS}s"
+            ) from exc
 
     async def send(self, channel: str, message: str) -> None:
         await self._send_frame(
@@ -187,23 +216,30 @@ class AgentLabTransport(AgentTransport):
         )
 
     async def _recv_loop(self) -> None:
-        assert self._connection is not None
-        async for raw in self._connection:
-            try:
-                frame = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(frame, dict):
-                continue
-            frame_type = frame.get("type")
-            if frame_type == _WELCOME:
-                self.last_welcome = frame
-                if self._on_welcome is not None:
-                    await self._on_welcome(frame)
-            elif frame_type == _EVENT:
-                for callback in list(self._event_callbacks):
-                    await callback(frame)
-            elif frame_type == _CHANNEL_MESSAGE:
-                channel = frame.get("channel")
-                for callback in list(self._subscribers.get(channel, [])):
-                    await callback(frame)
+        connection = self._connection
+        assert connection is not None
+        try:
+            async for raw in connection:
+                try:
+                    frame = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(frame, dict):
+                    continue
+                frame_type = frame.get("type")
+                if frame_type == _WELCOME:
+                    self.last_welcome = frame
+                    if self._on_welcome is not None:
+                        await self._on_welcome(frame)
+                elif frame_type == _EVENT:
+                    for callback in list(self._event_callbacks):
+                        await callback(frame)
+                elif frame_type == _CHANNEL_MESSAGE:
+                    channel = frame.get("channel")
+                    for callback in list(self._subscribers.get(channel, [])):
+                        await callback(frame)
+        finally:
+            # The socket ended (drop or close): if nobody reconnected yet,
+            # mark the transport disconnected so send() fails fast and typed.
+            if self._connection is connection:
+                self._connection = None
