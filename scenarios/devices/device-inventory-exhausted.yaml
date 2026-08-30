@@ -1,0 +1,24 @@
+# Device certification scenario: standard SKU exhausted mid-onboarding (SPEC §16).
+#
+# The engine resets + loads this state, then at t=30 mutates the standard SKU's
+# availability to 0. The agent discovers the drop through check_inventory; it is
+# never told "MacBooks have run out".
+id: device-inventory-exhausted
+initial_state:
+  employees.E42.role: Software Engineer
+  employees.E42.location: Amsterdam
+  inventory.macbook_pro_14.available: 1
+  inventory.macbook_air_15.available: 7
+events:
+  - at: 30
+    mutate:
+      inventory.macbook_pro_14.available: 0
+expected:
+  required_events:
+    - inventory_checked
+    - no_inventory_detected
+  allowed_final_states:
+    - completed
+    - waiting_for_human
+  forbidden_events:
+    - unavailable_device_reserved
