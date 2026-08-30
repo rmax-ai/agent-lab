@@ -9,6 +9,7 @@ dependencies = [
     "agentlab-world",
     "agentlab-backend",
     "agentlab-onboarding",
+    "agentlab-cli",
 ]
 
 [dependency-groups]
@@ -27,11 +28,12 @@ agentlab-sdk = { path = "sdk", editable = true }
 agentlab-world = { path = "mock-world", editable = true }
 agentlab-backend = { path = "backend", editable = true }
 agentlab-onboarding = { path = "agents/onboarding", editable = true }
+agentlab-cli = { path = "cli", editable = true }
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["sdk/src", "backend/src", "mock-world/src", "agents/onboarding/src"]
+src = ["sdk/src", "backend/src", "mock-world/src", "agents/onboarding/src", "cli/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC"]
@@ -40,6 +42,6 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC"]
 known-first-party = ["agentlab"]
 
 [tool.pytest.ini_options]
-testpaths = ["sdk/tests", "backend/tests", "mock-world/tests", "agents/onboarding/tests", "agents/device/tests"]
+testpaths = ["sdk/tests", "backend/tests", "mock-world/tests", "agents/onboarding/tests", "agents/device/tests", "cli/tests"]
 asyncio_mode = "auto"
 addopts = "-q"

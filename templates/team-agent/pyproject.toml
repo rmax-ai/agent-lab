@@ -1,0 +1,36 @@
+# Canonical team-agent project file (SPEC §26). `agent-lab init <name>` copies
+# this verbatim. The uv git-subdirectory sources point at the public agent-lab
+# repo, so a fresh copy of this directory anywhere supports:
+#
+#   uv sync && agent-lab dev
+#
+# agentlab-backend and agentlab-world are declared explicitly (with git
+# sources) because `agent-lab dev` boots both apps in-process; uv only honors
+# [tool.uv.sources] from the project root, so transitive git-subdirectory
+# resolution through agentlab-cli is not enough.
+[project]
+name = "team-agent"
+version = "0.1.0"
+description = "Team-owned domain agent for Agent Lab (SPEC §5)"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "agentlab-cli",
+    "agentlab-sdk",
+    "agentlab-backend",
+    "agentlab-world",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+agentlab-cli = { git = "https://github.com/rmax-ai/agent-lab", subdirectory = "cli" }
+agentlab-sdk = { git = "https://github.com/rmax-ai/agent-lab", subdirectory = "sdk" }
+agentlab-backend = { git = "https://github.com/rmax-ai/agent-lab", subdirectory = "backend" }
+agentlab-world = { git = "https://github.com/rmax-ai/agent-lab", subdirectory = "mock-world" }
