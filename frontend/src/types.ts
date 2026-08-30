@@ -6,25 +6,27 @@ export interface Agent {
   status: AgentStatus
   tools: number
   knowledge_docs: number
+  connected_at?: string | null
 }
 
-export interface DomainStatus {
-  access: DomainState
-  device: DomainState
-  systems: DomainState
-  applications: DomainState
-}
+export type DomainStatus = Partial<Record<'access' | 'device' | 'systems' | 'applications', DomainState>>
 
+/** Backend case list rows; `domain_status` is present only on GET /cases/{case_id}. */
 export interface Case {
   case_id: string
   employee_id: string
   status: string
-  domain_status: DomainStatus
   blockers: number
-  approvals: number
+  open_approvals?: number
+  created_at?: string
+  context?: Record<string, unknown>
+  domain_status: DomainStatus
+  /** UI alias normalized from the backend's `open_approvals` list field. */
+  approvals?: number
   events?: string
 }
 
+/** Canonical SDK Event serialized by GET /cases/{case_id}/events. */
 export interface TraceEvent {
   ts: string
   case_id: string
@@ -44,12 +46,14 @@ export interface HumanTask {
   context: Record<string, unknown>
   allowed_actions: string[]
   status: 'open' | 'resolved'
-  decision?: string | null
+  /** Live backend uses a decision object; string support is retained for mock replay. */
+  decision?: Record<string, unknown> | string | null
   resolved_by?: string | null
-  created_at?: string
+  created_at: string
   resolved_at?: string | null
 }
 
+/** Live scenario support is pending a backend route in a later batch. */
 export interface ScenarioInfo {
   id: string
   status: 'not_run' | 'passed' | 'failed'
@@ -57,6 +61,7 @@ export interface ScenarioInfo {
   detail: string | null
 }
 
+/** Live evaluation support is pending a backend route in a later batch. */
 export interface EvalResult {
   scenario_id: string
   result: 'pass' | 'fail'
@@ -66,11 +71,45 @@ export interface EvalResult {
   final_state?: string
 }
 
+export interface WorldEmployee extends Record<string, unknown> {
+  id?: string
+  name?: string
+  role?: string
+  location?: string
+  manager_id?: string | null
+  manager_name?: string | null
+  start_date?: string
+  status?: string
+}
+
+export interface WorldDevice extends Record<string, unknown> {
+  required_sku?: string
+  assigned_device?: Record<string, unknown> | null
+  order?: Record<string, unknown> | null
+}
+
+export interface WorldAccess extends Record<string, unknown> {
+  identity?: Record<string, unknown> | string | null
+  entitlements?: Array<Record<string, unknown>>
+  groups?: Array<Record<string, unknown>>
+}
+
+export interface WorldAccessRequest extends Record<string, unknown> {
+  id: string
+  employee_id: string
+  group_id: string | null
+  description: string | null
+  status: string
+}
+
+/** Composed from MockWorld employee, device, access, and access-request endpoints. */
 export interface WorldState {
-  employee: Record<string, unknown>
-  device: Record<string, unknown>
+  employee: WorldEmployee
+  device: WorldDevice
+  access: WorldAccess
+  access_requests?: WorldAccessRequest[]
+  /** Legacy mock-replay fields retained until WorldView is upgraded in D.2b. */
   inventory: Record<string, unknown>
-  access: Record<string, unknown>
   applications: Record<string, unknown>
 }
 
