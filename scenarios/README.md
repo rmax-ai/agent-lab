@@ -102,8 +102,16 @@ like trajectory events.
 
 `scenarios/hidden/` holds the Platform Team's private unseen-simulation
 scenarios — including the SPEC §20 "unknown" scenario, where teams know only
-that *some* onboarding exceptions will occur, not which. The rule (DEC-14
-[FINAL]):
+that *some* onboarding exceptions will occur, not which, and the SPEC §20
+final chaos scenario. The current archive contents (canonical copies live
+outside this repo):
+
+| File | Scenario id | Exercises |
+|---|---|---|
+| `01_unknown_exceptions.yaml` | `hidden-01-unknown-exceptions` | 3 starters (E201..E203): missing location, denied-then-approved privileged retry, substitution after stock consumption |
+| `02_chaos_monday_starters.yaml` | `hidden-02-chaos-monday-starters` | the final chaos scenario: 12 Monday starters (E301..E312) with six adapted SPEC §20 fault modes — mid-run inventory exhaustion (E303), privileged approval (E304), manager change + unauthorized approver (E306), lying provisioning detected via truthful read (E308), knowledge/world conflict (E309), unanswered approval SLA (E310), access tool timeout (E311) — plus DEC-05 tool faults; the readiness-verdict AC is "Are Monday's new joiners ready?": 9 READY, 3 NOT READY (E303 no inventory, E310 unanswered approval, E311 tool timeout), every NOT READY with its blocker evidence on the case audit trail |
+
+The rule (DEC-14 [FINAL]):
 
 - **Hidden scenarios never ship to participants.** Participants receive only
   the team packs (`scenarios/devices/`, `scenarios/access/`,
