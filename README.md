@@ -37,6 +37,9 @@ Google ADK + Python · FastAPI backend · Pydantic · SQLite · YAML scenarios �
 - [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) — threat analysis
 - [docs/ROADMAP.md](docs/ROADMAP.md) — phased plan with acceptance criteria
 - [AGENTS.md](AGENTS.md) — conventions for coding agents
+- [docs/SCENARIO_AUTHORING.md](docs/SCENARIO_AUTHORING.md) — scenario YAML schema, faults, packs, hidden scenarios
+- [docs/PARTICIPANT_RUNBOOK.md](docs/PARTICIPANT_RUNBOOK.md) — team dev loop, CLI reference, certification, troubleshooting
+- [docs/PRODUCTION_NOTES.md](docs/PRODUCTION_NOTES.md) — topology, auth, known limits, migration path, observability
 
 ## License
 
