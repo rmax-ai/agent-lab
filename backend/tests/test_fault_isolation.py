@@ -101,7 +101,11 @@ def _fault_scenario(scenario_id: str, tool: str, kind: str) -> Scenario:
 
 
 async def test_concurrent_runs_isolate_fault_state(world_app: FastAPI) -> None:
-    """Two gathered runs arm different faults; neither sees the other's."""
+    """Two gathered runs arm different faults; neither sees the other's.
+
+    The world's simulation endpoints serialize per-process (mutation lock), so
+    both runs share one world instance safely; the fault arming + agent phases
+    still overlap, which is the isolation property under test."""
     holder_a: dict[str, _FaultProbingAgent] = {}
     holder_b: dict[str, _FaultProbingAgent] = {}
     engine = ScenarioEngine()

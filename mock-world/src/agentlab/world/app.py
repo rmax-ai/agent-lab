@@ -527,24 +527,33 @@ async def provision_application(
     return {"application_access": access}
 
 
+# World mutation endpoints run their SQL in thread-pool threads against one
+# SQLite file (process-global engine). Serialize mutating simulation calls so
+# concurrent scenario runs can share one world instance without wipe/seed races.
+_simulation_mutation_lock = asyncio.Lock()
+
+
 @simulation_router.post("/reset")
 async def reset(session: SessionDep) -> dict[str, str]:
     """Wipe the world tables and reseed the canonical state."""
-    await asyncio.to_thread(reset_world, session)
+    async with _simulation_mutation_lock:
+        await asyncio.to_thread(reset_world, session)
     return {"status": "reset"}
 
 
 @simulation_router.post("/load")
 async def load(body: LoadRequest, session: SessionDep) -> dict[str, str]:
     """Reset, then apply a flat ``{dot.path: value}`` state."""
-    await asyncio.to_thread(_load_state, session, body.state)
+    async with _simulation_mutation_lock:
+        await asyncio.to_thread(_load_state, session, body.state)
     return {"status": "loaded"}
 
 
 @simulation_router.post("/mutate")
 async def mutate(body: MutateRequest, session: SessionDep) -> dict[str, Any]:
     """Set a single world field via a dot-path."""
-    value = await asyncio.to_thread(apply_mutation, session, body.path, body.value)
+    async with _simulation_mutation_lock:
+        value = await asyncio.to_thread(apply_mutation, session, body.path, body.value)
     return {"path": body.path, "value": value}
 
 
