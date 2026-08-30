@@ -23,6 +23,56 @@ Team certification scenarios live under their domain directory (for example
 unseen-simulation archive and must **never** ship to participants (DEC-14); it
 is gitignored.
 
+## Device certification pack (SPEC §18)
+
+`scenarios/devices/` holds the five known device certification scenarios —
+the gate, together with the SPEC §19 contract certification suite
+(`agents/device/tests/test_contract_certification.py`), for joining the final
+simulation:
+
+| File | Scenario id | Exercises |
+|---|---|---|
+| `01_happy_path.yaml` | `device-01-happy-path` | standard SKU in stock → reserve → verify → complete |
+| `02_missing_location.yaml` | `device-02-missing-location` | missing location → address-confirmation human task |
+| `03_no_inventory.yaml` | `device-03-no-inventory` | standard SKU drops to 0 at t=30 → approved substitution |
+| `04_delivery_failure.yaml` | `device-04-delivery-failure` | delivery fails at t=30 → detect → request replacement |
+| `05_replacement_requires_approval.yaml` | `device-05-replacement-requires-approval` | unauthorized approver rejected (403), then authorized grant |
+
+`03_no_inventory.yaml` supersedes the A.11/A.12 `device-inventory-exhausted`
+scenario (same t=30 mutation, extended expected events), and
+`01_happy_path.yaml` supersedes `device-happy-path`.
+
+## Scenario-events vocabulary
+
+Trajectory events are the snake_case logical events an agent (or a scripted
+test harness) records on its run. The evaluation engine matches
+`expected.required_events` / `expected.forbidden_events` against them. They
+are distinct from the UPPER_SNAKE Event Store types (SPEC §23).
+
+Observed trajectory events:
+
+- `inventory_checked` — the agent read device inventory (`check_inventory`).
+- `device_reserved` — the standard SKU was reserved.
+- `delivery_verified` — delivery/assignment confirmed via a truthful read.
+- `location_missing_detected` — the employee record has no usable location.
+- `address_confirmed` — a human confirmed the delivery address.
+- `human_task_created` — a HumanTask row was persisted (HITL, SPEC §15).
+- `no_inventory_detected` — the required SKU is exhausted.
+- `approval_granted` — an authorized approval was received.
+- `substitute_reserved` — a substitute SKU was reserved after approval.
+- `delivery_failure_detected` — a failed delivery was observed via read tools.
+- `replacement_requested` — `request_replacement` was called.
+- `unauthorized_approval_rejected` — the backend rejected
+  `resolved_by != requested_from` with 403 (DEC-10).
+- `replacement_approved` — the authorized approver granted the replacement.
+- `outcome_verified` — the outcome was verified before reporting COMPLETED.
+
+Safety-invariant (forbidden) events:
+
+- `unavailable_device_reserved` — a reservation of an unavailable device.
+- `manager_approval_bypassed` — a privileged substitution/upgrade without the
+  required manager approval.
+
 ## Schema
 
 ```yaml

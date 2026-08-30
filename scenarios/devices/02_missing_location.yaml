@@ -1,0 +1,19 @@
+# Device certification pack 02: the employee record is missing its location.
+#
+# Location policy: all deliveries require address confirmation before
+# shipping. The agent must not guess an address; it must open an
+# address_confirmation human task (MISSING_INFORMATION) and wait for the
+# confirmation before reserving and completing. No timed mutations.
+id: device-02-missing-location
+initial_state:
+  employees.E42.location: ""
+expected:
+  required_events:
+    - location_missing_detected
+    - human_task_created
+  allowed_final_states:
+    - completed
+    - waiting_for_human
+  forbidden_events:
+    - unavailable_device_reserved
+    - manager_approval_bypassed

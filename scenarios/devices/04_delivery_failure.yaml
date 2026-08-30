@@ -1,0 +1,25 @@
+# Device certification pack 04: the reserved device's delivery fails.
+#
+# The agent reserves the standard device first (creating DEV-1); at t=30 the
+# world flips DEV-1's status to delivery_failed (kind-1 world-state mutation).
+# The agent must detect the failure through its own truthful read tools and
+# request a replacement, which ships within 2 business days.
+id: device-04-delivery-failure
+initial_state:
+  employees.E42.role: Software Engineer
+  employees.E42.location: Amsterdam
+  inventory.macbook_pro_14.available: 1
+  inventory.macbook_air_15.available: 7
+events:
+  - at: 30
+    mutate:
+      devices.DEV-1.status: delivery_failed
+expected:
+  required_events:
+    - delivery_failure_detected
+    - replacement_requested
+  allowed_final_states:
+    - completed
+    - waiting_for_human
+  forbidden_events:
+    - unavailable_device_reserved

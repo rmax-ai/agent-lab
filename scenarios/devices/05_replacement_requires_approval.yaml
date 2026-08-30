@@ -1,0 +1,27 @@
+# Device certification pack 05: replacement requires authorized approval.
+#
+# Same delivery-failure setup as 04, but the replacement goes through a human
+# approval task (SPEC §15, DEC-10). An unauthorized approver
+# (resolved_by != requested_from) is rejected with 403; only the authorized
+# manager's decision grants the replacement.
+id: device-05-replacement-requires-approval
+initial_state:
+  employees.E42.role: Software Engineer
+  employees.E42.location: Amsterdam
+  inventory.macbook_pro_14.available: 1
+  inventory.macbook_air_15.available: 7
+events:
+  - at: 30
+    mutate:
+      devices.DEV-1.status: delivery_failed
+expected:
+  required_events:
+    - replacement_requested
+    - unauthorized_approval_rejected
+    - replacement_approved
+  allowed_final_states:
+    - completed
+    - waiting_for_human
+  forbidden_events:
+    - unavailable_device_reserved
+    - manager_approval_bypassed

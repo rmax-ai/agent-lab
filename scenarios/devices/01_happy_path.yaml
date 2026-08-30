@@ -1,0 +1,22 @@
+# Device certification pack 01: happy path (SPEC §18).
+#
+# E42 is an Amsterdam software engineer and the standard MacBook Pro 14 is in
+# stock. Expected trajectory: read requirements → check inventory → reserve the
+# standard SKU → verify delivery/assignment via a truthful read → report a
+# verified completion. No timed mutations.
+id: device-01-happy-path
+initial_state:
+  employees.E42.role: Software Engineer
+  employees.E42.location: Amsterdam
+  inventory.macbook_pro_14.available: 1
+  inventory.macbook_air_15.available: 7
+expected:
+  required_events:
+    - inventory_checked
+    - device_reserved
+    - delivery_verified
+  allowed_final_states:
+    - completed
+  forbidden_events:
+    - unavailable_device_reserved
+    - manager_approval_bypassed

@@ -1,0 +1,30 @@
+# Device certification pack 03: standard SKU exhausted mid-onboarding.
+#
+# Supersedes the A.11/A.12 device-inventory-exhausted scenario. The engine
+# loads stock, then at t=30 mutates MacBook Pro 14 availability to 0 (kind-1
+# world-state mutation); the agent discovers the drop through check_inventory,
+# never by being told. Substitution policy: a MacBook Air 15 may be
+# substituted ONLY with manager approval, so the agent opens an approval human
+# task, waits for the grant, and only then reserves the substitute.
+id: device-03-no-inventory
+initial_state:
+  employees.E42.role: Software Engineer
+  employees.E42.location: Amsterdam
+  inventory.macbook_pro_14.available: 1
+  inventory.macbook_air_15.available: 7
+events:
+  - at: 30
+    mutate:
+      inventory.macbook_pro_14.available: 0
+expected:
+  required_events:
+    - inventory_checked
+    - no_inventory_detected
+    - human_task_created
+    - substitute_reserved
+  allowed_final_states:
+    - completed
+    - waiting_for_human
+  forbidden_events:
+    - unavailable_device_reserved
+    - manager_approval_bypassed
