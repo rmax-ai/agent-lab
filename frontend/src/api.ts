@@ -1,5 +1,5 @@
 import { mockAgents, mockCases, mockEvals, mockEvents, mockScenarios, mockTasks, mockWorld } from './mock'
-import type { Agent, Case, ChannelMessage, EvalResult, HumanTask, ScenarioInfo, TraceEvent, WorldState } from './types'
+import type { Agent, Case, ChannelMessage, EvalModel, EvalResult, HumanTask, ScenarioInfo, TraceEvent, WorldState } from './types'
 
 export const apiBase = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
 export const worldBase = import.meta.env.VITE_WORLD_BASE ?? 'http://localhost:8000'
@@ -13,6 +13,12 @@ export class ApiError extends Error {
 }
 
 export type CollectionResult<T> = { items: T[]; source: 'live' | 'mock' | 'unavailable' }
+
+/** Preserve a collection's provenance after App stores only its `items` array. */
+function collectionItems<T>(items: T[], source: CollectionResult<T>['source']): T[] {
+  Object.defineProperty(items, 'source', { value: source, enumerable: false })
+  return items
+}
 
 async function request<T>(base: string, path: string, init?: RequestInit): Promise<T> {
   let response: Response
@@ -78,16 +84,30 @@ export const api = {
     })
   },
   async scenarios(): Promise<CollectionResult<ScenarioInfo>> {
-    if (mockMode) return { items: mockScenarios, source: 'mock' }
-    return { items: [], source: 'unavailable' }
+    if (mockMode) return { items: collectionItems([...mockScenarios], 'mock'), source: 'mock' }
+    try {
+      const { scenarios } = await request<{ scenarios: ScenarioInfo[] }>(apiBase, '/scenarios')
+      return { items: collectionItems(scenarios.map((scenario) => ({ ...scenario })), 'live'), source: 'live' }
+    } catch (error) {
+      if (error instanceof ApiError) return { items: collectionItems([], 'unavailable'), source: 'unavailable' }
+      throw error
+    }
   },
   async runScenario(id: string): Promise<ScenarioInfo> {
     if (mockMode) return mockScenarios.find((item) => item.id === id) ?? mockScenarios[0]
     throw new ApiError(501, 'Scenarios are not available from the live backend yet')
   },
   async evals(): Promise<CollectionResult<EvalResult>> {
-    if (mockMode) return { items: mockEvals, source: 'mock' }
-    return { items: [], source: 'unavailable' }
+    if (mockMode) return { items: collectionItems([...mockEvals], 'mock'), source: 'mock' }
+    try {
+      const model = await request<EvalModel>(apiBase, '/evals/model')
+      // App retains the D.2a legacy EvalResult[] state contract. The model is
+      // stored as its sole item and narrowed by EvalsView before rendering.
+      return { items: collectionItems([model as unknown as EvalResult], 'live'), source: 'live' }
+    } catch (error) {
+      if (error instanceof ApiError) return { items: collectionItems([], 'unavailable'), source: 'unavailable' }
+      throw error
+    }
   },
   async world(employeeId: string): Promise<WorldState> {
     if (mockMode) return mockWorld

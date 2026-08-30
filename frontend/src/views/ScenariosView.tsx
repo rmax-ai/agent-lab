@@ -1,11 +1,19 @@
-import { useState } from 'react'
-import { api } from '../api'
+import { useMemo, useState } from 'react'
 import { mockScenarios } from '../mock'
 import type { ScenarioInfo } from '../types'
 
-export function ScenariosView({ scenarios = mockScenarios, onScenariosChange }: { scenarios?: ScenarioInfo[]; onScenariosChange?: (scenarios: ScenarioInfo[]) => void }) {
-  const [running, setRunning] = useState<string | null>(null)
-  const run = async (scenario: ScenarioInfo) => { setRunning(scenario.id); const updated = await api.runScenario(scenario.id); onScenariosChange?.(scenarios.map((item) => item.id === scenario.id ? updated : item)); setRunning(null) }
-  const passed = scenarios.filter((item) => item.status === 'passed').length
-  return <main className="view"><header className="view-head"><div><h1>Device Agent scenarios</h1><p className="muted">{passed} / {scenarios.length} passed</p></div></header>{scenarios.length === 0 ? <p className="empty">0 results</p> : <div className="table-wrap"><table><thead><tr><th>Scenario</th><th>Result</th><th>Score</th><th>Detail</th><th /></tr></thead><tbody>{scenarios.map((scenario) => <tr key={scenario.id}><td>{scenario.id}</td><td><span className={`pill ${scenario.status === 'failed' ? 'blocked' : scenario.status === 'passed' ? 'complete' : 'running'}`}>{scenario.status === 'passed' ? 'PASS' : scenario.status === 'failed' ? 'FAIL' : 'NOT RUN'}</span></td><td>{scenario.score === null ? '—' : `${Math.round(scenario.score * 100)}%`}</td><td>{scenario.detail ?? '—'}</td><td><button disabled={running === scenario.id} onClick={() => void run(scenario)}>{running === scenario.id ? 'Running…' : 'Run'}</button></td></tr>)}</tbody></table></div>}</main>
+type ScenarioSource = 'live' | 'mock' | 'unavailable'
+type ScenarioList = ScenarioInfo[] & { source?: ScenarioSource }
+const domains = ['all', 'devices', 'access', 'integration', 'hidden'] as const
+
+function ExpectedList({ title, items }: { title: string; items?: string[] }) {
+  return <div><h3>{title}</h3><ul>{(items ?? []).map((item) => <li key={item}>{item}</li>)}</ul></div>
+}
+
+export function ScenariosView({ scenarios = mockScenarios, onScenariosChange: _onScenariosChange }: { scenarios?: ScenarioInfo[]; onScenariosChange?: (scenarios: ScenarioInfo[]) => void }) {
+  const [domain, setDomain] = useState<(typeof domains)[number]>('all')
+  const source = (scenarios as ScenarioList).source
+  const availableDomains = domains.filter((item) => item !== 'hidden' || scenarios.some((scenario) => scenario.hidden || scenario.domain === 'hidden'))
+  const visible = useMemo(() => scenarios.filter((scenario) => domain === 'all' || scenario.domain === domain), [scenarios, domain])
+  return <main className="view"><header className="view-head"><div><h1>Scenario browser</h1><p className="muted">{scenarios.length} scenarios</p></div></header><p className="actions">{availableDomains.map((item) => <button key={item} className={domain === item ? 'active' : ''} onClick={() => setDomain(item)}>{item}</button>)}</p>{scenarios.length === 0 ? <p className="empty">{source === 'unavailable' ? 'scenario routes unavailable' : '0 scenarios'}</p> : visible.length === 0 ? <p className="empty">0 scenarios</p> : <div className="eval-list">{visible.map((scenario) => <article className="eval" key={scenario.id}><header><div><strong>{scenario.id}</strong><small>{scenario.file ?? '—'}</small></div><div><span className="pill running">{scenario.domain ?? 'unknown'}</span>{scenario.hidden && <span className="pill blocked">hidden</span>}</div></header>{!scenario.hidden && <div className="compare"><ExpectedList title="Required events" items={scenario.required_events} /><ExpectedList title="Allowed final states" items={scenario.allowed_final_states} /><ExpectedList title="Forbidden events" items={scenario.forbidden_events} /></div>}</article>)}</div>}</main>
 }

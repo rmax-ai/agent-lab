@@ -53,15 +53,21 @@ export interface HumanTask {
   resolved_at?: string | null
 }
 
-/** Live scenario support is pending a backend route in a later batch. */
 export interface ScenarioInfo {
   id: string
-  status: 'not_run' | 'passed' | 'failed'
-  score: number | null
-  detail: string | null
+  /** Retained for the legacy mock replay. */
+  status?: 'not_run' | 'passed' | 'failed'
+  score?: number | null
+  detail?: string | null
+  domain?: 'devices' | 'access' | 'integration' | 'hidden'
+  file?: string
+  hidden?: boolean
+  required_events?: string[]
+  allowed_final_states?: string[]
+  forbidden_events?: string[]
 }
 
-/** Live evaluation support is pending a backend route in a later batch. */
+/** Legacy mock evaluation result. Live evaluation uses EvalModel instead. */
 export interface EvalResult {
   scenario_id: string
   result: 'pass' | 'fail'
@@ -69,6 +75,17 @@ export interface EvalResult {
   expected: string[]
   observed: string[]
   final_state?: string
+}
+
+export interface EvalModel {
+  dimensions: Array<{ name: string; weight: number }>
+  threshold: number
+  packs: {
+    devices: string[]
+    access: string[]
+    integration: string[]
+    hidden_count: number
+  }
 }
 
 export interface WorldEmployee extends Record<string, unknown> {
