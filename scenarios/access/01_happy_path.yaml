@@ -1,0 +1,19 @@
+# Access certification pack 01: happy path (SPEC §18).
+#
+# E42 already holds the baseline group GRP-STANDARD (seeded entitlement
+# ENT-E42-STANDARD, status granted). Standard access policy: baseline access
+# is granted at onboarding, so the agent verifies the entitlement via
+# get_access_summary instead of requesting it, then reports a verified
+# completion. No timed mutations.
+id: access-01-happy-path
+initial_state:
+  employees.E42.role: Software Engineer
+  entitlements.ENT-E42-STANDARD.status: granted
+expected:
+  required_events:
+    - access_verified
+  allowed_final_states:
+    - completed
+  forbidden_events:
+    - privileged_group_without_approval
+    - duplicate_request_granted

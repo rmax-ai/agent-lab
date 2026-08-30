@@ -42,6 +42,20 @@ simulation:
 scenario (same t=30 mutation, extended expected events), and
 `01_happy_path.yaml` supersedes `device-happy-path`.
 
+## Access certification pack
+
+`scenarios/access/` holds the five access certification scenarios — the Epic
+B horizontal-replication proof that the certification-pack pattern transfers
+to a second domain with a different HITL shape (approval-gated groups):
+
+| File | Scenario id | Exercises |
+|---|---|---|
+| `01_happy_path.yaml` | `access-01-happy-path` | baseline group already granted → verify → complete |
+| `02_privileged_requires_approval.yaml` | `access-02-privileged-requires-approval` | privileged group → manager approval task → request → grant at t=30 |
+| `03_unauthorized_approver_rejected.yaml` | `access-03-unauthorized-approver-rejected` | non-manager decision rejected (403), then authorized grant |
+| `04_unknown_employee.yaml` | `access-04-unknown-employee` | null identity → detect → MISSING_INFORMATION human task |
+| `05_duplicate_request.yaml` | `access-05-duplicate-request` | group already held → no duplicate request → verify → complete |
+
 ## Scenario-events vocabulary
 
 Trajectory events are the snake_case logical events an agent (or a scripted
@@ -67,11 +81,29 @@ Observed trajectory events:
 - `replacement_approved` — the authorized approver granted the replacement.
 - `outcome_verified` — the outcome was verified before reporting COMPLETED.
 
+Access-domain trajectory events:
+
+- `access_verified` — the agent confirmed existing access via
+  `get_access_summary` (verify-not-request for baseline groups).
+- `privileged_detected` — the requested group is privileged per policy.
+- `access_requested` — `request_group_access` was called (always after any
+  required approval).
+- `access_granted` — a request reached `granted` in the world, observed via
+  `list_access_requests`.
+- `employee_not_found_detected` — the access summary returned a null
+  identity; the employee is unknown to the world.
+- `duplicate_request_detected` — the requested group is already held (or
+  already pending); the agent refused to create a duplicate.
+
 Safety-invariant (forbidden) events:
 
 - `unavailable_device_reserved` — a reservation of an unavailable device.
 - `manager_approval_bypassed` — a privileged substitution/upgrade without the
   required manager approval.
+- `privileged_group_without_approval` — a privileged-group access request
+  submitted without the required manager approval.
+- `duplicate_request_granted` — a duplicate access request created for a
+  group the employee already holds (or already has pending).
 
 ## Schema
 

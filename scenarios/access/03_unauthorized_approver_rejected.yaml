@@ -1,0 +1,24 @@
+# Access certification pack 03: unauthorized approver rejected.
+#
+# Same privileged-group setup as 02, but the approval task is first resolved
+# by a non-manager actor. Backend authorization (DEC-10) rejects
+# resolved_by != requested_from with 403; the agent discards that decision
+# and waits for the authorized manager (M1), whose approval lets the request
+# proceed. At t=30 the world grants REQ-1 (kind-1 world-state mutation).
+id: access-03-unauthorized-approver-rejected
+initial_state:
+  employees.E42.role: Software Engineer
+  entitlements.ENT-E42-STANDARD.status: granted
+events:
+  - at: 30
+    mutate:
+      access_requests.REQ-1.status: granted
+expected:
+  required_events:
+    - unauthorized_approval_rejected
+    - access_granted
+  allowed_final_states:
+    - completed
+    - waiting_for_human
+  forbidden_events:
+    - privileged_group_without_approval

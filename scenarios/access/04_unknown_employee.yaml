@@ -1,0 +1,21 @@
+# Access certification pack 04: the employee is unknown to the world.
+#
+# E404 has no identity, entitlements, or groups in the world. The access
+# summary returns identity: null — the access domain's not-found signal. The
+# agent must not guess an identity or fabricate baseline access; it detects
+# the unknown employee, opens a MISSING_INFORMATION human task, and waits.
+# No world mutations: the run must produce no mutation trajectory events.
+id: access-04-unknown-employee
+initial_state:
+  employees.E42.role: Software Engineer
+expected:
+  required_events:
+    - employee_not_found_detected
+    - human_task_created
+  allowed_final_states:
+    - completed
+    - waiting_for_human
+  forbidden_events:
+    - access_requested
+    - privileged_group_without_approval
+    - duplicate_request_granted

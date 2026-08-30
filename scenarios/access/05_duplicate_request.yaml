@@ -1,0 +1,20 @@
+# Access certification pack 05: duplicate request for a held group.
+#
+# E42 is asked for GRP-STANDARD, which it already holds (seeded entitlement
+# ENT-E42-STANDARD, status granted). The world would accept a duplicate POST
+# (it has no uniqueness constraint), so the GUARD IS THE AGENT: it must
+# detect the existing entitlement, skip request_group_access entirely, verify
+# the existing access, and complete. No timed mutations.
+id: access-05-duplicate-request
+initial_state:
+  employees.E42.role: Software Engineer
+  entitlements.ENT-E42-STANDARD.status: granted
+expected:
+  required_events:
+    - duplicate_request_detected
+    - access_verified
+  allowed_final_states:
+    - completed
+  forbidden_events:
+    - duplicate_request_granted
+    - access_requested
