@@ -1,0 +1,73 @@
+# Integration scenario 01: five employees, one delayed device, one privileged
+# access approval (SPEC §20, Epic C batch 1).
+#
+# A known, committed scenario (not hidden — DEC-14's unknown/chaos scenarios
+# are batch 2 and a separate distribution). Its job is to fix interoperability
+# between the onboarding COORDINATOR, the DEVICE agent, and the ACCESS agent
+# on one shared world:
+#
+#   * E101, E102, E104, E105 — happy path: MacBook Pro 14 reserved, baseline
+#     GRP-STANDARD access earned through the request flow (the employees start
+#     with NO entitlements).
+#   * E103 — device DEV-E103 is already assigned with order ORD-1 in flight;
+#     at t=30 the world flips the order to `delayed` (kind-1 world-state
+#     mutation). The device agent must detect the delay through its own
+#     truthful read tools and request a replacement — never by being told.
+#   * E104 — needs GRP-PRIVILEGED on top of baseline; privileged-group policy
+#     requires a manager (M1) APPROVAL human task BEFORE the world request.
+#
+# World-setup note: `initial_state` is passed verbatim to POST
+# /simulation/load, whose contract is flat `collection.<id>.<field>` field
+# mutations of EXISTING rows — it never creates rows. The five employees
+# (E101..E105, manager M1, start Monday 2026-08-31, status pending), their
+# identities, and E103's assigned device + in-flight order ORD-1 are therefore
+# provisioned by the integration harness
+# (agents/onboarding/tests/test_integration_scenario.py) immediately after the
+# engine's reset+load — the world operator's share of the setup. This block
+# carries the part the load contract CAN express: enough MacBook Pro 14 stock
+# for every happy-path employee (the canonical seed stocks only 1).
+#
+# Access-request ids REQ-1..REQ-6 are deterministic: the seeded world has no
+# access requests, and the harness's scripted access agent creates requests
+# strictly in employee order (E101, E102, E103, E104 standard, E104
+# privileged, E105), so the world's REQ-n counter is stable. At t=60 the
+# world's IAM backend resolves all six requests to `granted` (kind-1
+# world-state mutations); agents discover the grants through
+# list_access_requests, never by being told.
+id: integration-01-five-employees
+initial_state:
+  inventory.macbook_pro_14.available: 5
+events:
+  - at: 30
+    mutate:
+      device_orders.ORD-1.status: delayed
+  - at: 60
+    mutate:
+      access_requests.REQ-1.status: granted
+      access_requests.REQ-2.status: granted
+      access_requests.REQ-3.status: granted
+      access_requests.REQ-4.status: granted
+      access_requests.REQ-5.status: granted
+      access_requests.REQ-6.status: granted
+expected:
+  required_events:
+    # Canonical Event Store types (SPEC §23), observed on the case timelines.
+    - WORKFLOW_DELEGATED # both domains, across all five employees
+    - OUTCOME_VERIFIED # every workflow completed with verified=true
+    # Trajectory events (snake_case logical events, scenarios/README.md).
+    - inventory_checked
+    - device_reserved
+    - delivery_delay_detected
+    - replacement_requested
+    - human_task_created
+    - approval_granted
+    - access_requested
+    - access_granted
+    - outcome_verified
+    - readiness_verdict_ready # coordinator verdict READY for every case
+  allowed_final_states:
+    - completed
+  forbidden_events:
+    - verdict_without_verification
+    - unavailable_device_reserved
+    - privileged_group_without_approval

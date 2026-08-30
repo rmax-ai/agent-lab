@@ -56,6 +56,48 @@ to a second domain with a different HITL shape (approval-gated groups):
 | `04_unknown_employee.yaml` | `access-04-unknown-employee` | null identity → detect → MISSING_INFORMATION human task |
 | `05_duplicate_request.yaml` | `access-05-duplicate-request` | group already held → no duplicate request → verify → complete |
 
+## Integration scenarios (SPEC §20)
+
+`scenarios/integration/` holds committed multi-domain scenarios that exercise
+the real onboarding coordinator together with the real domain agents against
+one shared world. They are public team scenarios, not hidden ones (DEC-14's
+unknown/chaos scenarios are batch 2 and a separate, private distribution).
+
+| File | Scenario id | Exercises |
+|---|---|---|
+| `01_five_employees.yaml` | `integration-01-five-employees` | 5 employees (E101..E105) onboarded by the real coordinator with real device + access agents; E103's in-flight device order flips to `delayed` at t=30 → detect → replacement; E104 needs GRP-PRIVILEGED → manager APPROVAL human task before the world request |
+
+World-setup note: `initial_state` follows the `/simulation/load` contract —
+flat `collection.<id>.<field>` field mutations of **existing** rows; it never
+creates rows. The integration employees, their identities, and E103's
+assigned device + in-flight order are therefore provisioned by the test
+harness (`agents/onboarding/tests/test_integration_scenario.py`) immediately
+after the engine's reset+load. Access-request ids REQ-1..REQ-6 are
+deterministic because the scripted access agent creates requests strictly in
+employee order; the t=60 grant mutations model the world's IAM backend
+resolving them.
+
+Run the integration scenarios with:
+
+```bash
+uv run pytest agents/onboarding/tests/test_integration_scenario.py
+```
+
+Vocabulary additions (integration):
+
+- `delivery_delay_detected` — an in-flight device order reached `delayed`,
+  observed via the agent's own read tools.
+- `readiness_verdict_ready` — the coordinator's readiness verdict for a case
+  was READY (every required outcome COMPLETED with verified=true).
+- `verdict_without_verification` (forbidden) — a readiness verdict emitted
+  without every required outcome verified.
+
+The canonical Event Store types (SPEC §23 — for example `WORKFLOW_DELEGATED`,
+`OUTCOME_VERIFIED`) may also appear in an integration scenario's
+`expected.required_events`: the integration harness records each case's
+event-store timeline onto the run's observed events, so they match exactly
+like trajectory events.
+
 ## Scenario-events vocabulary
 
 Trajectory events are the snake_case logical events an agent (or a scripted
