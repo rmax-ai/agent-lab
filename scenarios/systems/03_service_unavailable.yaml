@@ -1,0 +1,31 @@
+# Systems certification pack 03: provisioning tool unavailable (DEC-05).
+#
+# E42's SYS-VPN account is missing (SYS-EMAIL is active via world-operator
+# setup). A DEC-05 `timeout` fault is armed against provision_account at t=1 —
+# provision_account is a MUTATION tool (it opens a HumanTask through the
+# backend), explicitly declared in faults[].tool; reads stay truthful and are
+# never faulted. Every provisioning attempt times out. Policy
+# (service-degradation): the agent retries BOUNDED (at most MAX_RETRIES=3
+# retries), then escalates with a blocker + human task instead of looping.
+# The account is never provisioned; the run ends waiting_for_human.
+id: systems-03-service-unavailable
+initial_state:
+  employees.E42.role: Software Engineer
+events: []
+faults:
+  - at: 1
+    tool: provision_account
+    kind: timeout
+expected:
+  required_events:
+    - missing_account_detected
+    - provisioning_retry
+    - provisioning_escalated
+    - human_task_created
+  allowed_final_states:
+    - waiting_for_human
+    - blocked
+  forbidden_events:
+    - unbounded_retry
+    - account_created_by_agent
+    - account_verified

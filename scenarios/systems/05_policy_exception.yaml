@@ -1,0 +1,27 @@
+# Systems certification pack 05: HR account for a non-manager (policy violation).
+#
+# The world operator pre-creates active SYS-EMAIL + SYS-VPN accounts AND a
+# SYS-HR account for E42 — a Software Engineer, NOT a people manager. At t=30
+# the HR account flips active. hr-system-policy: an HR account for a
+# non-manager is a policy violation in ANY status. The agent must detect it
+# on its verification pass, open a blocker/human task for deprovisioning, and
+# NOT verify or complete the case while the violation stands. The run ends
+# waiting_for_human.
+id: systems-05-policy-exception
+initial_state:
+  employees.E42.role: Software Engineer
+events:
+  - at: 30
+    mutate:
+      system_accounts.SYSACC-E42-HR.status: active
+expected:
+  required_events:
+    - policy_violation_detected
+    - human_task_created
+  allowed_final_states:
+    - waiting_for_human
+    - blocked
+  forbidden_events:
+    - policy_violation_ignored
+    - hr_account_verified
+    - account_created_by_agent

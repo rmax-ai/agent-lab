@@ -1,0 +1,25 @@
+# Systems certification pack 04: partial provisioning — one account stuck.
+#
+# The world operator pre-creates BOTH baseline accounts as pending. At t=30
+# SYS-EMAIL flips active, but SYS-VPN stays pending past the scenario
+# deadline: provisioning is stuck. The agent keeps reading
+# (account-status-semantics: pending = in flight), detects the stuck account
+# once the deadline passes, and escalates (blocker + IT human task) instead
+# of completing with a missing requirement. The run ends waiting_for_human.
+id: systems-04-partial-provisioning
+initial_state:
+  employees.E42.role: Software Engineer
+events:
+  - at: 30
+    mutate:
+      system_accounts.SYSACC-E42-EMAIL.status: active
+expected:
+  required_events:
+    - stuck_account_detected
+    - human_task_created
+  allowed_final_states:
+    - completed
+    - waiting_for_human
+  forbidden_events:
+    - account_verified
+    - account_created_by_agent

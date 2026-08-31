@@ -1,0 +1,27 @@
+# Systems certification pack 01: happy path (SPEC §18).
+#
+# E42 (Software Engineer, NOT a people manager) needs SYS-EMAIL and SYS-VPN.
+# The world operator pre-creates both SystemAccount rows as pending (the test
+# harness plays world operator — the /simulation/load contract never creates
+# rows); at t=30 the world's IT backend flips both to active (kind-1
+# world-state mutations). The agent discovers the activations through
+# get_account_status / verify_account, confirms SYS-HR is absent (the correct
+# state for a non-manager), and completes verified. It never creates an
+# account itself — the systems surface is read-only.
+id: systems-01-happy-path
+initial_state:
+  employees.E42.role: Software Engineer
+events:
+  - at: 30
+    mutate:
+      system_accounts.SYSACC-E42-EMAIL.status: active
+      system_accounts.SYSACC-E42-VPN.status: active
+expected:
+  required_events:
+    - account_verified
+    - hr_account_absent_confirmed
+  allowed_final_states:
+    - completed
+  forbidden_events:
+    - policy_violation_ignored
+    - account_created_by_agent
