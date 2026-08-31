@@ -15,9 +15,9 @@ jobs:
       - name: Install
         run: uv sync --frozen --all-packages
       - name: Lint
-        run: uv run ruff check sdk/src backend/src mock-world/src agents/onboarding/src agents/device agents/access agents/systems cli/src
+        run: uv run ruff check sdk/src backend/src mock-world/src agents/onboarding/src agents/device agents/access agents/systems agents/applications cli/src
       - name: Type check
-        run: uv run ty check sdk/src backend/src mock-world/src agents/onboarding/src agents/device agents/access agents/systems cli/src
+        run: uv run ty check sdk/src backend/src mock-world/src agents/onboarding/src agents/device agents/access agents/systems agents/applications cli/src
       - name: Tests
         run: uv run pytest
   frontend:
