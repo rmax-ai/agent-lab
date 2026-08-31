@@ -42,6 +42,6 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC"]
 known-first-party = ["agentlab"]
 
 [tool.pytest.ini_options]
-testpaths = ["sdk/tests", "backend/tests", "mock-world/tests", "agents/onboarding/tests", "agents/device/tests", "agents/access/tests", "cli/tests"]
+testpaths = ["sdk/tests", "backend/tests", "mock-world/tests", "agents/onboarding/tests", "agents/device/tests", "agents/access/tests", "agents/systems/tests", "agents/applications/tests", "cli/tests"]
 asyncio_mode = "auto"
 addopts = "-q"
