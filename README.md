@@ -2,7 +2,7 @@
 
 Development, simulation, and evaluation environment for team-owned operational AI agents.
 
-**Agent Lab** is a self-contained simulation harness around [Google ADK](https://google.github.io/adk-docs/). Teams receive an agent template, a Markdown knowledge base, typed tools backed by a shared MockWorld API, and certification scenarios. The first business process is **monthly employee onboarding**: an Onboarding Agent coordinates domain agents (Access and Device implemented; Systems and Applications registry-ready for replication) against a simulated reality — then the whole system must answer, deterministically: *"Are next Monday's new employees ready?"*
+**Agent Lab** is a self-contained simulation harness around [Google ADK](https://google.github.io/adk-docs/). Teams receive an agent template, a Markdown knowledge base, typed tools backed by a shared MockWorld API, and certification scenarios. The first business process is **monthly employee onboarding**: an Onboarding Agent coordinates four domain agents (Device, Access, Systems, Applications — all built and certified) against a simulated reality — then the whole system must answer, deterministically: *"Are next Monday's new employees ready?"*
 
 ```
 Onboarding Agent → delegates outcomes → Domain Agents → reason via knowledge + observed state → Domain Tools → MockWorld
@@ -17,7 +17,7 @@ The coordinator owns the process. Domain agents own their workflows.
 ```bash
 git clone https://github.com/rmax-ai/agent-lab.git && cd agent-lab
 uv sync
-uv run pytest                                  # 222 tests: unit + certification packs + finals
+uv run pytest                                  # 285 tests: unit + certification packs + finals
 uv run agent-lab --help                        # dev / init / scenario run / trace / status
 uv run agent-lab scenario run --scenario scenarios/devices/01_happy_path.yaml --scripted
 ```
@@ -61,7 +61,7 @@ Google ADK + Python · FastAPI backend · Pydantic · SQLite · YAML scenarios �
 
 ## Status
 
-**Phase 4 complete, Phase 5 verification green.** Vertical slice (onboarding → device → access → HITL → eval), replication proof (Access agent), multi-agent finals (integration, unknown, chaos with readiness verdict + audit trail), CLI dev loop, operator console, hardening (event route, fault isolation, WS reconnect, CORS). Board: [GitHub issues](https://github.com/rmax-ai/agent-lab/issues).
+**Epic B complete: all four domain agents built and certified.** Vertical slice (onboarding → device → access → HITL → eval), horizontal replication proof (Access, Systems, Applications agents — including a read-only-world domain where provisioning flows through IT HumanTasks, and a full-mutator domain with an idempotent grant route), multi-agent finals (four-domain integration, unknown, chaos with readiness verdict + audit trail), CLI dev loop, operator console, hardening (event route, fault isolation, WS reconnect, CORS). The committed integration scenario onboards five employees through the real coordinator and all four real domain agents — green in CI. Board: [GitHub issues](https://github.com/rmax-ai/agent-lab/issues).
 
 ## Docs
 

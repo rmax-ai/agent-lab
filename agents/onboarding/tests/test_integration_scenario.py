@@ -4,11 +4,11 @@ Parametrized over ``scenarios/integration/*.yaml``; new integration scenarios
 drop in by adding a YAML plus a scripted driver below. Each scenario runs the
 REAL onboarding coordinator (no live LLM — a canned ``before_model_callback``
 answers any model turn) against the REAL backend over in-process ASGI, while
-scripted device/access domain loops react to REAL ``WORKFLOW_DELEGATED``
-events and do their work through the REAL MockWorld tools. Nothing a real
-domain agent would do is stubbed. The ScenarioEngine plays the world (reset →
-load → timed mutations); the EvaluationEngine scores the run against the
-SPEC §24 weights. Every integration scenario must PASS.
+scripted device/access/systems/applications domain loops react to REAL
+``WORKFLOW_DELEGATED`` events and do their work through the REAL MockWorld
+tools. Nothing a real domain agent would do is stubbed. The ScenarioEngine
+plays the world (reset → load → timed mutations); the EvaluationEngine scores
+the run against the SPEC §24 weights. Every integration scenario must PASS.
 
 World-setup note: ``initial_state`` follows the ``/simulation/load`` contract
 (flat ``collection.<id>.<field>`` field mutations of existing rows — it never
@@ -38,7 +38,9 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from agents.access.tools import access  # noqa: E402
+from agents.applications.tools import applications  # noqa: E402
 from agents.device.tools import device  # noqa: E402
+from agents.systems.tools import systems  # noqa: E402
 from google.adk.models.llm_response import LlmResponse  # noqa: E402
 from google.genai import types  # noqa: E402
 
@@ -50,7 +52,13 @@ from agentlab.backend.scenarios import ScenarioEngine, load_scenario  # noqa: E4
 from agentlab.onboarding import CoordinatorAgent  # noqa: E402
 from agentlab.world import db as world_db  # noqa: E402
 from agentlab.world.app import create_app as create_world_app  # noqa: E402
-from agentlab.world.models import Device, DeviceOrder, Employee, Identity  # noqa: E402
+from agentlab.world.models import (  # noqa: E402
+    Device,
+    DeviceOrder,
+    Employee,
+    Identity,
+    SystemAccount,
+)
 
 _SCENARIOS_DIR = _REPO_ROOT / "scenarios" / "integration"
 _SCENARIO_FILES = sorted(_SCENARIOS_DIR.glob("*.yaml"))
@@ -60,18 +68,29 @@ _TIME_SCALE = 0.02  # the t=30 mutation lands at ~0.6s, t=60 at ~1.2s
 
 _DEVICE_AGENT = "device-agent"
 _ACCESS_AGENT = "access-agent"
+_SYSTEMS_AGENT = "systems-agent"
+_APPLICATIONS_AGENT = "applications-agent"
 _COORDINATOR_ID = "onboarding-agent"
 _MANAGER_ID = "M1"
 _EMPLOYEES = ["E101", "E102", "E103", "E104", "E105"]
 _CASES = {employee_id: f"ONB-{employee_id}" for employee_id in _EMPLOYEES}
 _DELAYED_EMPLOYEE = "E103"  # in-flight order ORD-1 flips to delayed at t=30
 _PRIVILEGED_EMPLOYEE = "E104"  # needs GRP-PRIVILEGED via manager approval
+_NON_ENGINEERING_EMPLOYEE = "E105"  # Marketing Specialist: no GitHub grant
 _STANDARD_GROUP = "GRP-STANDARD"
 _PRIVILEGED_GROUP = "GRP-PRIVILEGED"
 _STANDARD_SKU = "macbook_pro_14"
+_BASELINE_SYSTEMS = ["SYS-EMAIL", "SYS-VPN"]
+_BASELINE_APPLICATIONS = ["APP-SLACK", "APP-GOOGLE-WORKSPACE"]
+_ENGINEERING_APPLICATION = "APP-GITHUB"
 _START_DATE = "2026-08-31"  # Monday
-_WORKFLOWS = ["device", "access"]
-_READY_GOALS = {"employee_device_ready", "employee_access_ready"}
+_WORKFLOWS = ["device", "access", "systems", "applications"]
+_READY_GOALS = {
+    "employee_device_ready",
+    "employee_access_ready",
+    "employee_systems_ready",
+    "employee_applications_ready",
+}
 
 
 def _expected_state() -> dict[str, Any]:
@@ -89,6 +108,18 @@ def _expected_state() -> dict[str, Any]:
             "granted" if employee_id == _PRIVILEGED_EMPLOYEE else "none"
         )
         state[f"{employee_id}_order"] = "none"
+        # Systems: both baseline accounts flipped active at t=60; SYS-HR never
+        # exists (no employee is a people manager).
+        state[f"{employee_id}_sys_email"] = "active"
+        state[f"{employee_id}_sys_vpn"] = "active"
+        state[f"{employee_id}_sys_hr"] = "missing"
+        # Applications: Slack + Workspace for everyone; GitHub only for the
+        # engineering roles (E105 is a Marketing Specialist).
+        state[f"{employee_id}_app_slack"] = True
+        state[f"{employee_id}_app_google_workspace"] = True
+        state[f"{employee_id}_app_github"] = (
+            employee_id != _NON_ENGINEERING_EMPLOYEE
+        )
     # The world device summary returns the FIRST order row: E103's delayed
     # ORD-1. The replacement (ORD-2, ordered) is in flight per policy, visible
     # through the device status replacement_ordered.
@@ -109,15 +140,26 @@ def _provision_integration_world() -> None:
 
     The harness plays world operator here (never the agents): five pending
     employees with identities, plus E103's already-assigned device and its
-    in-flight order ORD-1 — the row the scenario's t=30 mutation delays.
+    in-flight order ORD-1 — the row the scenario's t=30 mutation delays —
+    plus each employee's pending SystemAccount rows for SYS-EMAIL and
+    SYS-VPN (the rows the scenario's t=60 mutation flips to ``active``; the
+    systems surface is read-only, so agents can never create them). No
+    SYS-HR rows exist: no integration employee is a people manager. No
+    ApplicationAccess rows either: the scripted applications agent grants
+    every required application itself through the idempotent world route.
     """
     with world_db.session_scope() as session:
         for index, employee_id in enumerate(_EMPLOYEES, start=1):
+            role = (
+                "Marketing Specialist"
+                if employee_id == _NON_ENGINEERING_EMPLOYEE
+                else "Software Engineer"
+            )
             session.add(
                 Employee(
                     id=employee_id,
                     name=f"Integration Starter {index}",
-                    role="Software Engineer",
+                    role=role,
                     location="Amsterdam",
                     manager_id=_MANAGER_ID,
                     start_date=_START_DATE,
@@ -131,6 +173,15 @@ def _provision_integration_world() -> None:
                     status="created",
                 )
             )
+            for system_id in _BASELINE_SYSTEMS:
+                session.add(
+                    SystemAccount(
+                        id=f"SYSACC-{employee_id}-{system_id.removeprefix('SYS-')}",
+                        employee_id=employee_id,
+                        system_id=system_id,
+                        status="pending",
+                    )
+                )
         session.add(
             Device(
                 id=f"DEV-{_DELAYED_EMPLOYEE}",
@@ -174,6 +225,26 @@ async def _read_final_world_state() -> dict[str, Any]:
             (r["status"] for r in requests if r.get("group_id") == _PRIVILEGED_GROUP),
             "none",
         )
+        account_status = await systems.get_account_status(employee_id)
+        accounts = {
+            row["system_id"]: row["account_status"]
+            for row in account_status.get("accounts", [])
+            if isinstance(row, dict)
+        }
+        state[f"{employee_id}_sys_email"] = accounts.get("SYS-EMAIL", "missing")
+        state[f"{employee_id}_sys_vpn"] = accounts.get("SYS-VPN", "missing")
+        state[f"{employee_id}_sys_hr"] = accounts.get("SYS-HR", "missing")
+        app_access = await applications.get_application_access(employee_id)
+        grants = {
+            row["application_id"]: bool(row.get("granted"))
+            for row in app_access.get("applications", [])
+            if isinstance(row, dict)
+        }
+        state[f"{employee_id}_app_slack"] = grants.get("APP-SLACK", False)
+        state[f"{employee_id}_app_google_workspace"] = grants.get(
+            "APP-GOOGLE-WORKSPACE", False
+        )
+        state[f"{employee_id}_app_github"] = grants.get("APP-GITHUB", False)
     return state
 
 
@@ -181,8 +252,8 @@ class ScriptedIntegrationAgent:
     """Composite agent under test: REAL coordinator + scripted domain loops.
 
     ``run`` drives the whole integration flow: world provisioning, one case
-    per employee, the real coordinator delegating both domains per case, and
-    the scripted device/access loops reacting to the real delegation events.
+    per employee, the real coordinator delegating all four domains per case,
+    and the scripted domain loops reacting to the real delegation events.
     ``timeline_events`` records the snake_case trajectory events plus the
     canonical Event Store types observed on each case timeline;
     ``final_state`` / ``timeline_events`` are what the ScenarioEngine reads.
@@ -253,7 +324,7 @@ class ScriptedIntegrationAgent:
     # --- scenario driver -------------------------------------------------------
 
     async def _drive_five_employees(self) -> None:
-        """Onboard E101..E105 with the real coordinator and both domains."""
+        """Onboard E101..E105 with the real coordinator and all four domains."""
         _provision_integration_world()
         for employee_id, case_id in _CASES.items():
             response = await self.backend.post(
@@ -265,6 +336,8 @@ class ScriptedIntegrationAgent:
         loops = [
             asyncio.create_task(self._device_loop()),
             asyncio.create_task(self._access_loop()),
+            asyncio.create_task(self._systems_loop()),
+            asyncio.create_task(self._applications_loop()),
         ]
         try:
             verdicts = await asyncio.gather(
@@ -454,6 +527,135 @@ class ScriptedIntegrationAgent:
         self._record("approval_granted", employee_id)
         await self._request_group(employee_id, _PRIVILEGED_GROUP, "onboarding privileged")
 
+    # --- scripted systems agent ------------------------------------------------
+
+    async def _systems_loop(self) -> None:
+        """React to real systems delegations across every case, in case order."""
+        handled: set[str] = set()
+        while True:
+            for employee_id, case_id in _CASES.items():
+                for event in await self._case_events(case_id):
+                    if (
+                        event["type"] == "WORKFLOW_DELEGATED"
+                        and event["payload"].get("target_agent_id") == _SYSTEMS_AGENT
+                        and event["workflow_id"] not in handled
+                    ):
+                        handled.add(event["workflow_id"])
+                        await self._systems_workflow(employee_id, event["workflow_id"])
+            await asyncio.sleep(0.01)
+
+    async def _systems_workflow(self, employee_id: str, workflow_id: str) -> None:
+        """Baseline accounts pending → t=60 flip discovered via truthful reads.
+
+        The systems world surface is read-only: the harness already played IT
+        (world operator) by creating the pending SYS-EMAIL/SYS-VPN rows, and
+        the scenario's t=60 mutation flips them active. The agent never
+        creates or activates accounts; it discovers the flips through
+        get_account_status and verifies with verify_account.
+        """
+        await self._ack(workflow_id, _SYSTEMS_AGENT)
+        required = await systems.get_required_systems(employee_id)
+        assert required["required_systems"] == _BASELINE_SYSTEMS, required
+        assert required["hr_required"] is False, required  # no people managers
+        # The loop is sequential per employee: after E101's workflow has
+        # waited out the t=60 flip, later employees may first observe their
+        # accounts already active. Both are honest discoveries of the same
+        # world-state change — never a notification.
+        accounts = await self._system_accounts(employee_id)
+        assert accounts["SYS-EMAIL"] in {"pending", "active"}, accounts
+        assert accounts["SYS-VPN"] in {"pending", "active"}, accounts
+        assert accounts["SYS-HR"] == "missing", accounts
+        for _ in range(600):  # 600 * 0.01s = 6s real-time budget
+            accounts = await self._system_accounts(employee_id)
+            if all(accounts.get(s) == "active" for s in _BASELINE_SYSTEMS):
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("timed account-activation mutations never landed")
+        verification = await systems.verify_account(employee_id)
+        assert verification["all_required_verified"] is True, verification
+        assert verification["policy_violations"] == [], verification
+        assert verification["accounts"]["SYS-HR"] == "missing", verification
+        self._record("hr_account_absent_confirmed", employee_id)
+        self._record("account_verified", employee_id)
+        await self._complete_verified(workflow_id, _SYSTEMS_AGENT, employee_id)
+
+    async def _system_accounts(self, employee_id: str) -> dict[str, str]:
+        """Truthful read: per-system account_status for the employee."""
+        status = await systems.get_account_status(employee_id)
+        return {
+            row["system_id"]: row["account_status"]
+            for row in status.get("accounts", [])
+            if isinstance(row, dict)
+        }
+
+    # --- scripted applications agent -------------------------------------------
+
+    async def _applications_loop(self) -> None:
+        """React to real applications delegations across every case, in order."""
+        handled: set[str] = set()
+        while True:
+            for employee_id, case_id in _CASES.items():
+                for event in await self._case_events(case_id):
+                    if (
+                        event["type"] == "WORKFLOW_DELEGATED"
+                        and event["payload"].get("target_agent_id")
+                        == _APPLICATIONS_AGENT
+                        and event["workflow_id"] not in handled
+                    ):
+                        handled.add(event["workflow_id"])
+                        await self._applications_workflow(
+                            employee_id, event["workflow_id"]
+                        )
+            await asyncio.sleep(0.01)
+
+    async def _applications_workflow(
+        self, employee_id: str, workflow_id: str
+    ) -> None:
+        """Provision every required-but-missing application, then verify.
+
+        Applications is a full-mutator domain with an idempotent grant route
+        and no revoke route: the harness pre-grants nothing, so the agent
+        grants every required application itself, strictly per the
+        role→application policy (GitHub only for engineering roles — E105 is
+        a Marketing Specialist and must never receive it).
+        """
+        await self._ack(workflow_id, _APPLICATIONS_AGENT)
+        required = await applications.get_required_applications(employee_id)
+        required_apps: list[str] = required["required_applications"]
+        if employee_id == _NON_ENGINEERING_EMPLOYEE:
+            assert required["github_required"] is False, required
+            assert required_apps == _BASELINE_APPLICATIONS, required
+        else:
+            assert required["github_required"] is True, required
+            assert required_apps == [
+                *_BASELINE_APPLICATIONS,
+                _ENGINEERING_APPLICATION,
+            ], required
+        access = await applications.get_application_access(employee_id)
+        grants = {
+            row["application_id"]: bool(row.get("granted"))
+            for row in access.get("applications", [])
+            if isinstance(row, dict)
+        }
+        assert not grants.get(_ENGINEERING_APPLICATION, False)  # starts ungranted
+        for application_id in required_apps:
+            if grants.get(application_id, False):
+                continue  # idempotent policy: never re-provision a held grant
+            self._record("required_application_missing", employee_id)
+            result = await applications.provision_application(
+                employee_id, application_id
+            )
+            assert result["provisioned"] is True, result
+            self._record("application_provisioned", employee_id)
+        verification = await applications.verify_application_access(employee_id)
+        assert verification["all_required_verified"] is True, verification
+        assert verification["policy_violations"] == [], verification
+        if employee_id == _NON_ENGINEERING_EMPLOYEE:
+            assert verification["grants"][_ENGINEERING_APPLICATION] is False
+        self._record("application_access_verified", employee_id)
+        await self._complete_verified(workflow_id, _APPLICATIONS_AGENT, employee_id)
+
 
 @pytest.fixture
 def world_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FastAPI:
@@ -461,7 +663,11 @@ def world_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     monkeypatch.setenv("AGENTLAB_DB", str(tmp_path / "lab.db"))
     monkeypatch.setenv("SIMULATION_TOKEN", _TOKEN)
     monkeypatch.setenv("AGENTLAB_SIMULATION_TOKEN", _TOKEN)
-    monkeypatch.setenv("ALLOWED_DOMAINS", "device-agent:devices,access-agent:access")
+    monkeypatch.setenv(
+        "ALLOWED_DOMAINS",
+        "device-agent:devices,access-agent:access,"
+        "systems-agent:systems,applications-agent:applications",
+    )
     monkeypatch.delenv("ALLOW_ANY_RESOLVER", raising=False)  # enforce DEC-10
     monkeypatch.setenv("MOCKWORLD_URL", "http://mockworld")
     world_db.reset_engine()
@@ -480,10 +686,12 @@ def backend_app(world_app: FastAPI) -> FastAPI:
 def domain_transports(
     world_app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> httpx.ASGITransport:
-    """Route both domain agents' tool HTTP calls at the in-process MockWorld."""
+    """Route every domain agent's tool HTTP calls at the in-process MockWorld."""
     transport = httpx.ASGITransport(app=world_app)
     monkeypatch.setattr(device, "TRANSPORT", transport)
     monkeypatch.setattr(access, "TRANSPORT", transport)
+    monkeypatch.setattr(systems, "TRANSPORT", transport)
+    monkeypatch.setattr(applications, "TRANSPORT", transport)
     return transport
 
 
@@ -563,7 +771,7 @@ async def test_integration_scenario_passes(
     for event in scenario.expected.forbidden_events:
         assert event not in agent.timeline_events
 
-    # Multi-domain delegation: both domains, every employee, coordinator-actor.
+    # Multi-domain delegation: all four domains, every employee, coordinator.
     events_by_case = {
         case_id: (await backend_client.get(f"/cases/{case_id}/events")).json()["events"]
         for case_id in _CASES.values()
@@ -574,12 +782,17 @@ async def test_integration_scenario_passes(
         for event in events
         if event["type"] == "WORKFLOW_DELEGATED"
     ]
-    assert len(delegated) == 2 * len(_EMPLOYEES)
+    assert len(delegated) == len(_WORKFLOWS) * len(_EMPLOYEES)
     assert all(event["actor"] == _COORDINATOR_ID for event in delegated)
     assert {(e["case_id"], e["payload"]["target_agent_id"]) for e in delegated} == {
         (case_id, agent_id)
         for case_id in _CASES.values()
-        for agent_id in (_DEVICE_AGENT, _ACCESS_AGENT)
+        for agent_id in (
+            _DEVICE_AGENT,
+            _ACCESS_AGENT,
+            _SYSTEMS_AGENT,
+            _APPLICATIONS_AGENT,
+        )
     }
     verified = [
         event
@@ -587,7 +800,7 @@ async def test_integration_scenario_passes(
         for event in events
         if event["type"] == "OUTCOME_VERIFIED"
     ]
-    assert len(verified) == 2 * len(_EMPLOYEES)
+    assert len(verified) == len(_WORKFLOWS) * len(_EMPLOYEES)
 
     # HITL happened exactly once: E104's privileged-access approval by M1.
     for employee_id, case_id in _CASES.items():
@@ -618,3 +831,11 @@ async def test_integration_scenario_passes(
     assert final_state["macbook_pro_14_available"] == 1
     assert final_state[f"{_DELAYED_EMPLOYEE}_device"] == "replacement_ordered"
     assert final_state[f"{_PRIVILEGED_EMPLOYEE}_grp_privileged"] == "granted"
+    for employee_id in _EMPLOYEES:
+        assert final_state[f"{employee_id}_sys_email"] == "active"
+        assert final_state[f"{employee_id}_sys_vpn"] == "active"
+        assert final_state[f"{employee_id}_sys_hr"] == "missing"
+        assert final_state[f"{employee_id}_app_slack"] is True
+        assert final_state[f"{employee_id}_app_google_workspace"] is True
+    assert final_state[f"{_NON_ENGINEERING_EMPLOYEE}_app_github"] is False
+    assert final_state["E101_app_github"] is True

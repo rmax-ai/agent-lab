@@ -156,6 +156,8 @@ Each domain has a **certification pack** (SPEC §18): five scenarios under
 ```bash
 uv run pytest agents/device/tests/test_certification_pack.py
 uv run pytest agents/access/tests/test_certification_pack.py
+uv run pytest agents/systems/tests/test_certification_pack.py
+uv run pytest agents/applications/tests/test_certification_pack.py
 ```
 
 Each pack test parametrizes over the pack's YAML files, runs a scripted
@@ -166,11 +168,30 @@ workflow state is in `allowed_final_states`, no `forbidden_events` safety
 invariant fired, and the weighted SPEC §24 score meets the threshold (70/100
 by default). Packs are the gate for joining the final simulation, together
 with the SPEC §19 contract certification suite at
-`agents/device/tests/test_contract_certification.py`.
+`agents/<domain>/tests/test_contract_certification.py`.
+
+The four domains exercise deliberately different world contracts:
+
+- **Device** — full mutator: reserve/replace routes with inventory
+  consequences; delivery failures surface through truthful reads.
+- **Access** — request flow: the agent creates access requests, and the
+  world's IAM backend grants them via timed mutations; privileged groups are
+  gated on a manager APPROVAL human task created *before* the world request.
+- **Systems** — read-only world (`GET /world/systems/{id}` only). There is
+  no provisioning route: `provision_account` opens an IT provisioning
+  **HumanTask** through the backend task flow (`requested_from: it-support`),
+  and the account materializes later as a world-state change performed by
+  IT/the harness, discovered through truthful reads. Agents never create or
+  activate SystemAccount rows.
+- **Applications** — full mutator with an idempotent grant route and no
+  revoke route: the agent provisions only what the role→application mapping
+  requires (GitHub is engineering-only), and verifies before completing.
 
 Multi-agent integration scenarios run under
-`agents/onboarding/tests/test_integration_scenario.py`; the DEC-14 hidden
-runner (skips unless the platform archive is present) is
+`agents/onboarding/tests/test_integration_scenario.py` (the committed
+four-domain scenario onboards five employees through the real coordinator
+and all four real domain agents); the DEC-14 hidden runner (skips unless the
+platform archive is present) is
 `agents/onboarding/tests/test_hidden_scenarios.py`.
 
 ## Troubleshooting
@@ -180,7 +201,7 @@ runner (skips unless the platform archive is present) is
 | `✗ MockWorld unavailable` in `dev` output | nothing else squatting on `--world-port` (default 8000); the probe is `GET /openapi.json` |
 | Tool calls hit the wrong world | tools read `MOCKWORLD_URL` **at import time** (default `http://localhost:8000`); `agent-lab dev` sets it for you — set it yourself when running tools outside `dev` |
 | Model errors / surprising model | `AGENTLAB_MODEL` is read explicitly by the template and passed to the agent (DEC-17); unset means the SDK's configured behavior — pin it |
-| Wrong agent identity | `AGENTLAB_AGENT_ID` / `AGENTLAB_GOAL` env vars override the template defaults; the id must match the world's `ALLOWED_DOMAINS` entries (default `device-agent:devices`) for domain routes to allow it |
+| Wrong agent identity | `AGENTLAB_AGENT_ID` / `AGENTLAB_GOAL` env vars override the template defaults; the id must match the world's `ALLOWED_DOMAINS` entries for domain routes to allow it — the lab's canonical four-domain value is `device-agent:devices,access-agent:access,systems-agent:systems,applications-agent:applications` (code default: `device-agent:devices`) |
 | 401 from `/simulation/*` | the world requires `Authorization: Bearer $SIMULATION_TOKEN` (default `dev-token`); the CLI's scenario runner sends `SIMULATION_TOKEN` from the environment, defaulting to `dev-token` — keep both sides in sync |
 | 403 `UNAUTHORIZED_APPROVER` on a task decision | DEC-10: only the task's `requested_from` principal may resolve it (unless `ALLOW_ANY_RESOLVER=1` is set on the backend) |
 | Console shows no data | the frontend talks to `VITE_API_BASE` (default `http://localhost:8080`) and `VITE_WORLD_BASE` (default `http://localhost:8000`); CORS is open to the vite dev origin (`localhost:5173`). For a backend-free UI demo, `VITE_MOCK=1` puts the console in mock mode (canned frontend data, clearly not the lab) |
@@ -196,7 +217,7 @@ Environment variable summary:
 | `SIMULATION_TOKEN` | MockWorld `/simulation/*`, CLI runner | `dev-token` |
 | `AGENTLAB_SIMULATION_TOKEN` | ScenarioEngine bearer token when none is passed explicitly | unset |
 | `AGENTLAB_DB` | backend + MockWorld SQLite path | `./agent-lab.db` |
-| `ALLOWED_DOMAINS` | MockWorld domain enforcement | `device-agent:devices` |
+| `ALLOWED_DOMAINS` | MockWorld domain enforcement | `device-agent:devices` (canonical lab value: `device-agent:devices,access-agent:access,systems-agent:systems,applications-agent:applications`) |
 | `ALLOW_ANY_RESOLVER` | backend task decisions | unset (DEC-10 enforced) |
 | `AGENTLAB_HIDDEN_DIR` | hidden-scenario runner | `scenarios/hidden/` |
 | `VITE_API_BASE` / `VITE_WORLD_BASE` / `VITE_MOCK` | frontend console | `localhost:8080` / `localhost:8000` / off |

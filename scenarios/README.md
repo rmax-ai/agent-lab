@@ -104,17 +104,23 @@ unknown/chaos scenarios are batch 2 and a separate, private distribution).
 
 | File | Scenario id | Exercises |
 |---|---|---|
-| `01_five_employees.yaml` | `integration-01-five-employees` | 5 employees (E101..E105) onboarded by the real coordinator with real device + access agents; E103's in-flight device order flips to `delayed` at t=30 → detect → replacement; E104 needs GRP-PRIVILEGED → manager APPROVAL human task before the world request |
+| `01_five_employees.yaml` | `integration-01-five-employees` | 5 employees (E101..E105) onboarded by the real coordinator with all four real domain agents (device, access, systems, applications); E103's in-flight device order flips to `delayed` at t=30 → detect → replacement; E104 needs GRP-PRIVILEGED → manager APPROVAL human task before the world request; pending SYS-EMAIL/SYS-VPN accounts flip `active` at t=60 (IAM-backend pattern) → discovered via truthful reads; E105 is a Marketing Specialist → Slack + Workspace granted, GitHub never granted |
 
 World-setup note: `initial_state` follows the `/simulation/load` contract —
 flat `collection.<id>.<field>` field mutations of **existing** rows; it never
-creates rows. The integration employees, their identities, and E103's
-assigned device + in-flight order are therefore provisioned by the test
+creates rows. The integration employees, their identities, E103's assigned
+device + in-flight order, and every employee's pending SystemAccount rows
+(`SYSACC-<E>-EMAIL` / `SYSACC-<E>-VPN`) are therefore provisioned by the test
 harness (`agents/onboarding/tests/test_integration_scenario.py`) immediately
-after the engine's reset+load. Access-request ids REQ-1..REQ-6 are
-deterministic because the scripted access agent creates requests strictly in
-employee order; the t=60 grant mutations model the world's IAM backend
-resolving them.
+after the engine's reset+load. The systems surface is read-only for agents,
+so those rows — and their t=60 activation — are world-operator/IT work, never
+agent work. Access-request ids REQ-1..REQ-6 are deterministic because the
+scripted access agent creates requests strictly in employee order; the t=60
+grant mutations model the world's IAM backend resolving them. Applications
+need no timed mutations at all: the domain is a full mutator with an
+idempotent grant route, the harness pre-grants nothing, and the scripted
+applications agent grants every required application itself, strictly per the
+role→application mapping (GitHub only for engineering roles).
 
 Run the integration scenarios with:
 
@@ -130,6 +136,13 @@ Vocabulary additions (integration):
   was READY (every required outcome COMPLETED with verified=true).
 - `verdict_without_verification` (forbidden) — a readiness verdict emitted
   without every required outcome verified.
+
+The four-domain integration scenario additionally reuses the systems and
+applications vocabularies unchanged: `hr_account_absent_confirmed`,
+`account_verified`, `required_application_missing`,
+`application_provisioned`, `application_access_verified`, plus the forbidden
+invariants `account_created_by_agent`, `hr_account_verified`,
+`duplicate_provisioning`, and `out_of_role_provisioned`.
 
 The canonical Event Store types (SPEC §23 — for example `WORKFLOW_DELEGATED`,
 `OUTCOME_VERIFIED`) may also appear in an integration scenario's

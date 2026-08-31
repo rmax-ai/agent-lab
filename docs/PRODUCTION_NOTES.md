@@ -44,7 +44,15 @@ production auth. Know exactly what each mechanism does:
   (DEC-07): `ALLOWED_DOMAINS` (`agent-id:domain` pairs, default
   `device-agent:devices`) gates the shared `/world/employees/{id}` route to
   known agents and each domain router (`/world/devices`, `/world/access`, …)
-  to agents registered for that domain (else 403 `FORBIDDEN`).
+  to agents registered for that domain (else 403 `FORBIDDEN`). The canonical
+  four-domain value for the lab is
+  `device-agent:devices,access-agent:access,systems-agent:systems,applications-agent:applications`.
+  Note the asymmetry this implies: the systems surface is read-only
+  (`GET /world/systems/{id}` only) — systems provisioning is IT work modeled
+  as backend HumanTasks (`requested_from: it-support`) whose world effect
+  arrives as scenario/harness state changes, never as an agent world write —
+  while applications is a full mutator with an idempotent grant route and no
+  revoke route.
 - **Actor forcing.** On `POST /events` the backend forces `actor` to the
   `X-Agent-Id` value and sets `ts` server-side; client-supplied values for
   either are ignored, and `type` is validated against the `EventType`
