@@ -1,0 +1,31 @@
+# Applications certification pack 04: provisioning tool fault (DEC-05).
+#
+# E42 (Software Engineer) is missing APP-GITHUB. A DEC-05 `http_500` fault
+# is armed against provision_application at t=1 — provision_application is a
+# MUTATION tool, explicitly declared in faults[].tool; reads stay truthful
+# and are never faulted. Every provisioning attempt fails. Policy
+# (access-failure-policy): the agent retries BOUNDED (at most MAX_RETRIES=3
+# retries — safe because the grant route is idempotent), then escalates with
+# a blocker + HumanTask instead of looping. The grant never lands; the run
+# ends waiting_for_human.
+id: applications-04-access-failure
+initial_state:
+  employees.E42.role: Software Engineer
+events: []
+faults:
+  - at: 1
+    tool: provision_application
+    kind: http_500
+expected:
+  required_events:
+    - required_application_missing
+    - provisioning_retry
+    - provisioning_escalated
+    - human_task_created
+  allowed_final_states:
+    - waiting_for_human
+    - blocked
+  forbidden_events:
+    - unbounded_retry
+    - application_provisioned
+    - application_access_verified

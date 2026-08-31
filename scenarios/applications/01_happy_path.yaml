@@ -1,0 +1,22 @@
+# Applications certification pack 01: happy path (SPEC §18).
+#
+# E42 (Software Engineer — an engineering role) requires APP-SLACK,
+# APP-GOOGLE-WORKSPACE, and APP-GITHUB. The canonical seed already grants
+# APP-SLACK and APP-GOOGLE-WORKSPACE; APP-GITHUB is NOT granted. The agent
+# verifies the existing grants (never re-provisions them), provisions
+# APP-GITHUB through the real idempotent grant route, verifies the full
+# required set through a truthful read, and completes verified.
+id: applications-01-happy-path
+initial_state:
+  employees.E42.role: Software Engineer
+events: []
+expected:
+  required_events:
+    - required_application_missing
+    - application_provisioned
+    - application_access_verified
+  allowed_final_states:
+    - completed
+  forbidden_events:
+    - duplicate_provisioning
+    - out_of_role_provisioned

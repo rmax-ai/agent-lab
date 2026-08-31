@@ -1,0 +1,23 @@
+# Applications certification pack 02: unknown application id.
+#
+# The agent is asked to provision an application id that is absent from the
+# world catalog (APP-UNKNOWN — no such Application row). The world's
+# provisioning route answers with HTTP 404 and the NOT_FOUND envelope. Per
+# unknown-applications policy the agent detects the unknown id, does NOT
+# retry it and does NOT guess or invent an alternative id, opens a
+# HumanTask/blocker, and reports WAITING_FOR_HUMAN. No world mutation
+# happens: the grant state stays exactly as seeded.
+id: applications-02-missing-application
+initial_state:
+  employees.E42.role: Software Engineer
+events: []
+expected:
+  required_events:
+    - unknown_application_detected
+    - human_task_created
+  allowed_final_states:
+    - completed
+    - waiting_for_human
+  forbidden_events:
+    - application_id_guessed
+    - application_provisioned
